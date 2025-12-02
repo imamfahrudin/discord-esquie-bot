@@ -1,104 +1,64 @@
 # Discord Esquie Bot - AI Coding Guidelines
 
 ## Project Overview
-AI-powered Discord bot built with discord.py that responds to mentions with intelligent AI-generated responses using Pollinations.AI API. Single-file architecture with Docker deployment.
+AI-powered Discord bot built with discord.py that responds to mentions with intelligent AI-generated responses using Pollinations.AI API. Features conversation context tracking, reaction-based message deletion, and personalized multilingual responses.
 
 ## Architecture
-- **Package layout**: Main bot logic lives in the `esquie_bot` package (`esquie_bot/main.py`). A thin top-level `bot.py` entrypoint calls into the package for backwards compatibility.
-- **AI Integration**: Uses Pollinations.AI API for natural language processing and responses
-- **Intent-based permissions**: Uses minimal `discord.Intents.default()` - no privileged intents required
-- **Environment configuration**: Token management via python-dotenv and `.env` files
-- **Docker logging**: Custom logging function with immediate flush for container visibility
+- **Package Structure**: Core logic in `esquie_bot/` package; `bot.py` is thin compatibility wrapper
+- **Event-Driven**: discord.py event handlers for message processing and reactions
+- **AI Integration**: RESTful API calls to Pollinations.AI with conversation history
+- **Docker Logging**: Custom `log()` function with immediate flush for container visibility
 
-## Core Patterns
+## Critical Patterns
 
-### AI-Powered Response Flow with Chained Context
+### Message Response Flow
 ```python
-@bot.event
-async def on_message(message):
-    if message.author == bot.user:
-        return
-    
-    # Check for mentions OR replies to bot messages
-    is_mention = bot.user.mentioned_in(message)
-    is_reply_to_bot = False
-    conversation_history = []
-    
-    # Detect replies to bot messages and build full conversation chain
-    if message.reference and message.reference.message_id:
-        try:
-            referenced_msg = await message.channel.fetch_message(message.reference.message_id)
-            if referenced_msg.author == bot.user:
-                is_reply_to_bot = True
-                # Build complete conversation history by following reply chain
-                conversation_history = await build_conversation_history(message)
-        except discord.NotFound:
-            pass
-    
-    if not (is_mention or is_reply_to_bot):
-        return
-    
-    # Extract content and get AI response with full conversation context
-    content = message.content
-    if is_mention:
-        content = re.sub(r'<@!?{}>'.format(bot.user.id), '', content).strip()
-    
-    ai_response = get_ai_response(content, conversation_history)
-    await message.reply(ai_response)
+# 1. Check for mentions or replies to bot messages
+is_mention = bot.user.mentioned_in(message)
+is_reply_to_bot = message.reference and referenced_msg.author == bot.user
+
+# 2. Build conversation context by following reply chains
+conversation_history = await build_conversation_history(message)
+
+# 3. Send thinking message, then edit with AI response
+thinking_msg = await message.reply("🤔 Thinking...")
+ai_response = await get_ai_response(personalized_content, conversation_history)
+await thinking_msg.edit(content=ai_response)
 ```
 
-### Pollinations.AI API Integration with Full Context
+### Conversation Context Building
 ```python
-def get_ai_response(user_message, conversation_history=None):
-    messages = [
-        {"role": "system", "content": "You are a helpful AI assistant that responds naturally to user messages."}
-    ]
-    
-    # Add full conversation history
-    if conversation_history:
-        messages.extend(conversation_history)
-    
-    messages.append({"role": "user", "content": user_message})
-    
-    data = {"model": "openai", "messages": messages, "seed": 42}
-    
-    response = requests.post("https://text.pollinations.ai/openai", 
-                           headers={"Content-Type": "application/json"}, 
-                           data=json.dumps(data))
-    return response.json()['choices'][0]['message']['content']
-
+# Follow Discord reply chains to reconstruct conversation history
 async def build_conversation_history(message, max_depth=10):
-    """Build conversation history by following Discord reply chain"""
     history = []
     current_msg = message
-    depth = 0
-    
-    while current_msg and depth < max_depth:
-        # Skip current message, traverse reply chain backwards
-        if current_msg.id == message.id:
-            current_msg = current_msg.reference.message_id if current_msg.reference else None
-            depth += 1
-            continue
-            
-        # Determine role and add to history
-        role = "assistant" if current_msg.author == bot.user else "user"
-        history.insert(0, {"role": role, "content": current_msg.content})
-        
-        # Follow reply chain
-        if current_msg.reference and current_msg.reference.message_id:
-            current_msg = await current_msg.channel.fetch_message(current_msg.reference.message_id)
-        else:
-            break
-            
-        depth += 1
-    
+    while current_msg and len(history) < max_depth:
+        if current_msg.author == bot.user or bot.user.mentioned_in(current_msg):
+            role = "assistant" if current_msg.author == bot.user else "user"
+            history.insert(0, {"role": role, "content": current_msg.content})
+        # Move up the reply chain
+        current_msg = await get_referenced_message(current_msg)
     return history
+```
+
+### Reaction-Based Deletion
+```python
+@bot.event
+async def on_reaction_add(reaction, user):
+    # Allow original user to delete bot responses with X reactions
+    if (str(reaction.emoji) in ['❌', '✖️', '❎', 'x', 'X'] and
+        reaction.message.author == bot.user and
+        reaction.message.reference):
+        original_msg = await reaction.message.channel.fetch_message(
+            reaction.message.reference.message_id)
+        if original_msg.author == user:
+            await reaction.message.delete()
 ```
 
 ### Docker-Compatible Logging
 ```python
-def log(message):
-    """Log message with immediate flush for Docker visibility"""
+def log(message: str) -> None:
+    """Log with immediate flush for Docker container visibility"""
     print(message)
     sys.stdout.flush()
 ```
@@ -108,12 +68,8 @@ def log(message):
 ### Local Development
 ```bash
 pip install -r requirements.txt
-cp .env.example .env  # Add your bot token
-# Run via the compatibility entrypoint (same as before)
-python bot.py
-
-# Or run the package directly (uses a lazy-run wrapper):
-python -c "from esquie_bot import run; run()"
+cp .env.example .env  # Add Discord bot token
+python bot.py  # Or: python -c "from esquie_bot import run; run()"
 ```
 
 ### Docker Deployment
@@ -126,29 +82,18 @@ docker-compose down           # Stop bot
 ### Bot Setup
 1. Create bot at https://discord.com/developers/applications
 2. Copy token to `.env` file
-3. Invite bot with "Send Messages" permission
-4. Bot responds to @mentions with AI-generated responses
+3. Invite with "Send Messages", "Read Message History", "Add Reactions" permissions
 
-## Key Files
-- `esquie_bot/main.py` - Core bot implementation (event handlers, AI integration)
-- `bot.py` - Thin entrypoint wrapper that calls `esquie_bot.run()` for backward compatibility
-- `requirements.txt` - discord.py==2.3.2, python-dotenv==1.0.0, requests==2.31.0
-- `Dockerfile` - Python 3.11 slim base image with PYTHONUNBUFFERED=1
+## Key Conventions
+
+- **Error Handling**: Multiple fallback strategies (edit → reply → channel send)
+- **Mention Processing**: Parse `<@user_id>` patterns, include context in AI prompts
+- **Context Enrichment**: Add user display names, mention maps, referenced content
+- **API Integration**: Pollinations.AI with system prompt + conversation history
+- **Short Message Handling**: Expand prompts < 3 chars with contextual defaults
+
+## Essential Files
+- `esquie_bot/main.py` - Core event handlers and AI integration
+- `bot.py` - Compatibility entrypoint wrapper
+- `requirements.txt` - discord.py==2.3.2, python-dotenv, requests
 - `docker-compose.yml` - Container orchestration with logging
-- `.env.example` - Configuration template
-
-## API Integration Details
-- **Provider**: Pollinations.AI (free tier)
-- **Endpoint**: `https://text.pollinations.ai/openai`
-- **Model**: openai with seed=42 for consistency
-- **Message Format**: System + User message structure
-- **Error Handling**: Graceful fallbacks for API failures
-- **Rate Limiting**: 60-second timeout, respects API limits
-
-## Deployment Notes
-- **Privileged intents**: Code avoids requiring message content intent
-- **Permissions**: Only needs "Send Messages" and "Read Message History"
-- **Logging**: Docker logs configured with size limits (10m, 3 files) and immediate flush
-- **Restart policy**: `unless-stopped` for reliability
-- **AI Processing**: Handles short prompts by adding context, provides natural responses
-- **Chained Conversation Context**: Follows Discord reply chains to maintain full conversation history for coherent multi-turn conversations
