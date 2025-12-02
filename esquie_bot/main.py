@@ -175,6 +175,7 @@ async def on_message(message):
 
     is_mention = bot.user.mentioned_in(message)
     is_reply_to_bot = False
+    conversation_history = []
     referenced_content = ""
     
     # Check if this is a reply to one of our messages
