@@ -1,5 +1,9 @@
 # Discord Esquie Bot - AI Coding Guidelines
 
+## ⚠️ IMPORTANT: Read These Instructions First
+
+**This file contains critical patterns for working with the Discord Esquie Bot codebase. Always reference these patterns when making changes.**
+
 ## Project Overview
 AI-powered Discord bot built with discord.py that responds to mentions with intelligent AI-generated responses using Pollinations.AI API. Features conversation context tracking, reaction-based message deletion, and personalized multilingual responses.
 
@@ -9,9 +13,9 @@ AI-powered Discord bot built with discord.py that responds to mentions with inte
 - **AI Integration**: RESTful API calls to Pollinations.AI with conversation history
 - **Docker Logging**: Custom `log()` function with immediate flush for container visibility
 
-## Critical Patterns
+## Critical Patterns - ALWAYS USE THESE
 
-### Message Response Flow
+### Message Response Flow - REQUIRED PATTERN
 ```python
 # 1. Check for mentions or replies to bot messages
 is_mention = bot.user.mentioned_in(message)
