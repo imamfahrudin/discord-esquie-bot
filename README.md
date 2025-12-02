@@ -85,8 +85,11 @@ docker-compose down
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the bot
+# Run the bot (compatibility entrypoint)
 python bot.py
+
+# Or run the package directly:
+python -c "from esquie_bot import run; run()"
 ```
 
 ## Usage
@@ -210,9 +213,9 @@ The bot provides detailed logging including:
 - `[API REQUEST/SUCCESS/ERROR]`: AI API interaction details
 - `[REPLY]`: Successful message responses
 
-## Architecture
+- ## Architecture
 
-- **Single File**: All logic contained in `bot.py`
+- **Package**: Main logic lives in `esquie_bot/main.py`; `bot.py` is a thin entrypoint that calls `esquie_bot.run()` for backward compatibility.
 - **Event-Driven**: Uses discord.py's event system
 - **AI Integration**: RESTful API calls to Pollinations.AI
 - **Docker Optimized**: Logging with immediate flush for container visibility

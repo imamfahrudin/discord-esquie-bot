@@ -4,7 +4,7 @@
 AI-powered Discord bot built with discord.py that responds to mentions with intelligent AI-generated responses using Pollinations.AI API. Single-file architecture with Docker deployment.
 
 ## Architecture
-- **Single-file design**: All bot logic in `bot.py` using discord.py's event-driven Client architecture
+- **Package layout**: Main bot logic lives in the `esquie_bot` package (`esquie_bot/main.py`). A thin top-level `bot.py` entrypoint calls into the package for backwards compatibility.
 - **AI Integration**: Uses Pollinations.AI API for natural language processing and responses
 - **Intent-based permissions**: Uses minimal `discord.Intents.default()` - no privileged intents required
 - **Environment configuration**: Token management via python-dotenv and `.env` files
@@ -109,7 +109,11 @@ def log(message):
 ```bash
 pip install -r requirements.txt
 cp .env.example .env  # Add your bot token
+# Run via the compatibility entrypoint (same as before)
 python bot.py
+
+# Or run the package directly (uses a lazy-run wrapper):
+python -c "from esquie_bot import run; run()"
 ```
 
 ### Docker Deployment
@@ -126,7 +130,8 @@ docker-compose down           # Stop bot
 4. Bot responds to @mentions with AI-generated responses
 
 ## Key Files
-- `bot.py` - Complete bot implementation with AI integration and event handlers
+- `esquie_bot/main.py` - Core bot implementation (event handlers, AI integration)
+- `bot.py` - Thin entrypoint wrapper that calls `esquie_bot.run()` for backward compatibility
 - `requirements.txt` - discord.py==2.3.2, python-dotenv==1.0.0, requests==2.31.0
 - `Dockerfile` - Python 3.11 slim base image with PYTHONUNBUFFERED=1
 - `docker-compose.yml` - Container orchestration with logging
