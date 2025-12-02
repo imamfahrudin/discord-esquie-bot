@@ -4,6 +4,7 @@ import re
 import requests
 import sys
 import json
+import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
 from typing import List, Dict, Any, Optional
@@ -46,7 +47,7 @@ def parse_discord_mentions(message: discord.Message) -> Dict[str, str]:
     return mention_map
 
 
-def get_ai_response(user_message: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
+async def get_ai_response(user_message: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
     """Get response from Pollinations.AI API with full conversation context."""
     try:
         url = "https://text.pollinations.ai/openai"
@@ -66,8 +67,9 @@ def get_ai_response(user_message: str, conversation_history: Optional[List[Dict[
         data = {"model": "openai", "messages": messages, "seed": 42}
 
         log(f"[API REQUEST] POST to {url} with {len(messages)} total messages")
-        # Increase timeout to 60s for better response time
-        response = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=60)
+        # Run HTTP request in thread pool to avoid blocking the event loop
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, lambda: requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=60))
         response.raise_for_status()
 
         result = response.json()['choices'][0]['message']['content'].strip()
@@ -249,7 +251,7 @@ async def on_message(message):
     
     personalized_content = f"[{user_display_name}]: {content}{mention_context}{reference_context}"
 
-    ai_response = get_ai_response(personalized_content, conversation_history)
+    ai_response = await get_ai_response(personalized_content, conversation_history)
 
     if not ai_response:
         log("[ERROR] Got empty response from AI")
