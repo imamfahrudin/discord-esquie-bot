@@ -162,6 +162,10 @@ async def on_ready():
     log(f"[STARTUP] Bot is ready! Logged in as {bot.user}")
     log(f"[STARTUP] Bot ID: {bot.user.id}")
     log(f"[STARTUP] Connected to {len(bot.guilds)} servers")
+    
+    # Set bot status
+    await bot.change_presence(activity=discord.Game(name="Losing A Rock Is Better Than Never Having A Rock!"))
+    log("[STARTUP] Bot status updated")
 
 
 @bot.event
