@@ -8,6 +8,7 @@ import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
 from typing import List, Dict, Any, Optional
+import base64
 
 
 def log(message: str) -> None:
@@ -47,13 +48,98 @@ def parse_discord_mentions(message: discord.Message) -> Dict[str, str]:
     return mention_map
 
 
-async def get_ai_response(user_message: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
-    """Get response from Pollinations.AI API with full conversation context."""
+async def process_image_attachment(attachment: discord.Attachment) -> Optional[str]:
+    """Process a Discord image attachment and return AI description."""
+    try:
+        # Check if it's an image
+        if not attachment.content_type or not attachment.content_type.startswith('image/'):
+            return None
+            
+        log(f"[IMAGE] Processing image attachment: {attachment.filename} ({attachment.content_type})")
+        
+        # Download image data
+        image_data = await attachment.read()
+        
+        # Convert to base64
+        base64_image = base64.b64encode(image_data).decode('utf-8')
+        
+        # Use Pollinations.AI vision API
+        url = "https://text.pollinations.ai/openai"
+        
+        messages = [
+            {
+                "role": "user", 
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Describe this image in detail. Be specific about what you see, including any text, objects, people, colors, and context. Keep the description concise but informative."
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{attachment.content_type};base64,{base64_image}"
+                        }
+                    }
+                ]
+            }
+        ]
+        
+        data = {
+            "model": "openai",  # Vision-capable model
+            "messages": messages,
+            "max_tokens": 300,
+            "seed": 42
+        }
+        
+        log(f"[IMAGE API] Sending image to vision API")
+        
+        # Run HTTP request in thread pool
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, lambda: requests.post(
+            url, 
+            headers={"Content-Type": "application/json"}, 
+            data=json.dumps(data), 
+            timeout=60
+        ))
+        response.raise_for_status()
+        
+        result = response.json()['choices'][0]['message']['content'].strip()
+        log(f"[IMAGE API] Got description ({len(result)} characters)")
+        
+        return f"[Image: {attachment.filename}] {result}"
+        
+    except Exception as e:
+        log(f"[IMAGE ERROR] Failed to process image {attachment.filename}: {e}")
+        return f"[Image: {attachment.filename}] (Could not analyze this image)"
+
+
+async def get_image_descriptions(message: discord.Message) -> List[str]:
+    """Extract and describe all images in a message."""
+    descriptions = []
+    
+    if message.attachments:
+        for attachment in message.attachments:
+            description = await process_image_attachment(attachment)
+            if description:
+                descriptions.append(description)
+    
+    # Also check for image embeds (links that Discord auto-embeds)
+    if message.embeds:
+        for embed in message.embeds:
+            if embed.type == 'image' and embed.url:
+                log(f"[IMAGE] Found embedded image: {embed.url}")
+                descriptions.append(f"[Embedded Image] {embed.url}")
+    
+    return descriptions
+
+
+async def get_ai_response(user_message: str, conversation_history: Optional[List[Dict[str, str]]] = None, image_descriptions: Optional[List[str]] = None) -> str:
+    """Get response from Pollinations.AI API with full conversation context and image descriptions."""
     try:
         url = "https://text.pollinations.ai/openai"
 
         messages = [
-            {"role": "system", "content": f"You are Esquie, a helpful AI assistant that responds naturally to user messages in multiple languages including English, Spanish, French, German, Italian, Portuguese, Indonesian, and others. Match the user's language when possible. Current date and time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}. Try to respond in a single paragraph and avoid complex formatting. When users mention other Discord users in their messages, use Discord mention format <@user_id> in your responses instead of plain usernames."}
+            {"role": "system", "content": f"You are Esquie, a helpful AI assistant that responds naturally to user messages in multiple languages including English, Spanish, French, German, Italian, Portuguese, Indonesian, and others. Match the user's language when possible. Current date and time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}. Try to respond in a single paragraph and avoid complex formatting. When users mention other Discord users in their messages, use Discord mention format <@user_id> in your responses instead of plain usernames. You can also see and describe images that users share."}
         ]
 
         # Limit conversation history to prevent API token limits (keep last 10 messages)
@@ -62,7 +148,14 @@ async def get_ai_response(user_message: str, conversation_history: Optional[List
             messages.extend(limited_history)
             log(f"[CONTEXT] Added {len(limited_history)} messages from conversation history (limited from {len(conversation_history)})")
 
-        messages.append({"role": "user", "content": user_message})
+        # Build user message with image descriptions
+        full_user_message = user_message
+        if image_descriptions:
+            image_context = "\n\n".join(image_descriptions)
+            full_user_message = f"{user_message}\n\n{image_context}"
+            log(f"[IMAGES] Added {len(image_descriptions)} image descriptions to prompt")
+
+        messages.append({"role": "user", "content": full_user_message})
 
         data = {"model": "openai", "messages": messages, "seed": 42}
 
@@ -225,8 +318,9 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
-    # Skip messages without content (embeds, files, etc.)
-    if not message.content and not message.reference:
+    # Skip messages without content, attachments, or embeds (unless they're replies)
+    has_content = message.content or message.attachments or message.embeds
+    if not has_content and not message.reference:
         return
 
     is_mention = bot.user.mentioned_in(message)
@@ -267,14 +361,18 @@ async def on_message(message):
         content = re.sub(r'<@!?{}>'.format(bot.user.id), '', content).strip()
         log(f"[CONTENT] Extracted content after mention removal: '{content}'")
 
-    # Handle empty or very short content
+    # Handle empty or very short content (but allow if there are images)
+    has_images = bool(message.attachments or message.embeds)
     if not content:
-        if is_reply_to_bot:
+        if has_images:
+            content = "Please describe this image(s)."
+            log(f"[IMAGES] Using image description prompt for message with attachments")
+        elif is_reply_to_bot:
             content = "Please continue our conversation."
         else:
             content = "Hello! Can you introduce yourself?"
         log(f"[DEFAULT] Using default prompt: '{content}'")
-    elif len(content.strip()) < 3:
+    elif len(content.strip()) < 3 and not has_images:
         if is_reply_to_bot:
             content = f"Continuing our conversation: '{content.strip()}'"
         else:
@@ -305,11 +403,19 @@ async def on_message(message):
     
     personalized_content = f"[{user_display_name}]: {content}{mention_context}{reference_context}"
 
+    # Process any images in the message
+    image_descriptions = []
+    if message.attachments or message.embeds:
+        log("[IMAGES] Message contains attachments/embeds, processing images...")
+        image_descriptions = await get_image_descriptions(message)
+        if image_descriptions:
+            log(f"[IMAGES] Processed {len(image_descriptions)} images")
+
     # Send thinking message first
     thinking_message = await message.reply("🤔 Thinking...")
     log(f"[THINKING] Sent thinking message as reply to user {message.author.name}")
 
-    ai_response = await get_ai_response(personalized_content, conversation_history)
+    ai_response = await get_ai_response(personalized_content, conversation_history, image_descriptions)
 
     if not ai_response:
         log("[ERROR] Got empty response from AI")
