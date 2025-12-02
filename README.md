@@ -11,11 +11,11 @@ An AI-powered Discord bot built with Python and discord.py that provides intelli
 
 - 🤖 **AI-Powered Responses**: Uses Pollinations.AI API for natural, intelligent conversations
 - 💬 **Mention-Based Interaction**: Responds to @mentions with context-aware AI responses
-- � **Conversation Context**: Maintains conversation history when users reply to bot messages
-- �🐳 **Docker Deployment**: Easy containerized deployment with Docker Compose
+- 🔄 **Chained Conversation Context**: Maintains full conversation history by following reply chains
+- � **Docker Deployment**: Easy containerized deployment with Docker Compose
 - ⚙️ **Environment Configuration**: Secure token management via environment variables
 - 📝 **Smart Message Processing**: Handles short prompts and provides contextual responses
-- � **Real-time Logging**: Comprehensive logging visible in Docker containers
+- 📊 **Real-time Logging**: Comprehensive logging visible in Docker containers
 
 ## Prerequisites
 
@@ -115,17 +115,39 @@ Bot: Hello! Someone said 'hi'. Can you respond to that? Hi there! How can I assi
 
 ## Conversation Context
 
-The bot now supports natural conversations by maintaining context when users reply to its messages. When you reply to a bot message (using Discord's reply feature), the bot includes the previous response as context for more coherent follow-up conversations.
+The bot now supports natural, chained conversations by following Discord's reply chains. When you reply to a bot message, it reconstructs the entire conversation history to provide coherent, context-aware responses.
 
-### Examples
+### Chained Conversation Example
 
-**Multi-turn Conversation:**
+**Multi-turn Conversation with Full Context:**
 ```
 User: @YourBot tell me about Python
 Bot: Python is a high-level programming language known for its simplicity and readability. It's widely used for web development, data science, AI, and automation. What specifically would you like to know about Python?
 
 User: [replying to bot] How do I install it?
 Bot: To install Python, you can download it from the official website at python.org. They offer installers for Windows, macOS, and Linux. Make sure to check "Add Python to PATH" during installation on Windows. Would you like me to guide you through the installation process?
+
+User: [replying to bot] Yes, show me Windows installation
+Bot: Great! For Windows installation, follow these steps:
+
+1. Go to https://python.org/downloads/
+2. Click "Download Python 3.x.x" (latest version)
+3. Run the installer
+4. **Important**: Check "Add Python to PATH" at the bottom
+5. Click "Install Now"
+
+After installation, open Command Prompt and type `python --version` to verify. Let me know if you need help with the next steps!
+
+User: [replying to bot] How do I run my first program?
+Bot: Excellent! Now that Python is installed, let's create your first program. Here's how to get started:
+
+1. Open Notepad or any text editor
+2. Type: `print("Hello, World!")`
+3. Save the file as `hello.py`
+4. Open Command Prompt in the same folder
+5. Type: `python hello.py`
+
+You should see "Hello, World!" printed on the screen. This is the traditional first program in any programming language. What would you like to learn next about Python?
 ```
 
 **Context-Aware Responses:**
