@@ -490,11 +490,15 @@ async def image_command(interaction: discord.Interaction, prompt: str):
         url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
         
         # Customize the image size and model
+        # Request options: make images non-deterministic and enable enhancements
+        # Use lowercase string 'true' for boolean flags to be compatible with remote APIs
         params = {
             "width": 1024,
             "height": 1024,
             "model": "flux",
-            "seed": 42  # For consistent results
+            "nologo": "true",
+            "enhance": "true",
+            "private": "true"
         }
         
         log(f"[IMAGE_CMD] Making request to {url} with params: {params}")
