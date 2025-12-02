@@ -66,8 +66,8 @@ def get_ai_response(user_message: str, conversation_history: Optional[List[Dict[
         data = {"model": "openai", "messages": messages, "seed": 42}
 
         log(f"[API REQUEST] POST to {url} with {len(messages)} total messages")
-        # Reduce timeout from 60s to 15s for better responsiveness
-        response = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=15)
+        # Increase timeout to 60s for better response time
+        response = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=60)
         response.raise_for_status()
 
         result = response.json()['choices'][0]['message']['content'].strip()
@@ -175,8 +175,8 @@ async def on_message(message):
 
     is_mention = bot.user.mentioned_in(message)
     is_reply_to_bot = False
-    conversation_history = []
-
+    referenced_content = ""
+    
     # Check if this is a reply to one of our messages
     if message.reference and message.reference.message_id:
         try:
@@ -185,6 +185,11 @@ async def on_message(message):
                 is_reply_to_bot = True
                 log(f"[REPLY] User {message.author.name} replied to bot message: '{referenced_msg.content[:50]}...'")
                 conversation_history = await build_conversation_history(message)
+            else:
+                # If mentioning bot in reply to another user's message, include that message for context
+                if is_mention:
+                    referenced_content = referenced_msg.content
+                    log(f"[REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message with bot mention: '{referenced_msg.content[:50]}...'")
         except discord.NotFound:
             log("[REPLY] Referenced message not found - might have been deleted")
         except discord.Forbidden:
@@ -235,7 +240,13 @@ async def on_message(message):
         mention_context = f" [Mentioned users: {', '.join(mention_list)}]"
         log(f"[MENTION] Found mentions: {mention_context}")
     
-    personalized_content = f"[{user_display_name}]: {content}{mention_context}"
+    # Include referenced message content if replying to another user's message with bot mention
+    reference_context = ""
+    if referenced_content:
+        reference_context = f" [Replying to: {referenced_content}]"
+        log(f"[CONTEXT] Including referenced message: '{referenced_content[:50]}...'")
+    
+    personalized_content = f"[{user_display_name}]: {content}{mention_context}{reference_context}"
 
     ai_response = get_ai_response(personalized_content, conversation_history)
 
