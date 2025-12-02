@@ -16,6 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the bot code
 COPY bot.py .
 
+# Copy the package directory so the esquie_bot package is available in the image
+COPY esquie_bot ./esquie_bot
+
 # Copy environment file (will be overridden by docker-compose)
 COPY .env* ./
 
