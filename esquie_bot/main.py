@@ -183,15 +183,33 @@ async def on_reaction_add(reaction, user):
     if reaction.message.author != bot.user:
         return
     
-    # Check if user has permission to delete messages in this channel
-    if not reaction.message.channel.permissions_for(user).manage_messages:
-        # Allow anyone to delete bot messages with X reaction, or check for specific permissions
-        # For now, let's allow anyone to delete bot messages with X reaction
-        pass
+    # Check if the bot message is replying to the reacting user
+    if not reaction.message.reference or not reaction.message.reference.message_id:
+        log(f"[DELETE] Bot message is not a reply, ignoring X reaction from {user.name}")
+        return
+    
+    try:
+        # Get the original message that the bot replied to
+        original_message = await reaction.message.channel.fetch_message(reaction.message.reference.message_id)
+        
+        # Only allow the original user to delete their bot response
+        if original_message.author != user:
+            log(f"[DELETE] User {user.name} tried to delete bot message but is not the original requester")
+            return
+            
+    except discord.NotFound:
+        log("[DELETE] Referenced original message not found")
+        return
+    except discord.Forbidden:
+        log("[DELETE] Cannot access referenced message - permission issue")
+        return
+    except Exception as e:
+        log(f"[DELETE] Error checking original message: {e}")
+        return
     
     try:
         await reaction.message.delete()
-        log(f"[DELETE] Deleted bot message due to X reaction from {user.name}")
+        log(f"[DELETE] Deleted bot message due to X reaction from original user {user.name}")
     except discord.Forbidden:
         log(f"[DELETE] Cannot delete message - missing permissions for user {user.name}")
     except discord.NotFound:
@@ -288,8 +306,8 @@ async def on_message(message):
     personalized_content = f"[{user_display_name}]: {content}{mention_context}{reference_context}"
 
     # Send thinking message first
-    thinking_message = await message.channel.send("🤔 Thinking...")
-    log(f"[THINKING] Sent thinking message for user {message.author.name}")
+    thinking_message = await message.reply("🤔 Thinking...")
+    log(f"[THINKING] Sent thinking message as reply to user {message.author.name}")
 
     ai_response = await get_ai_response(personalized_content, conversation_history)
 
@@ -305,22 +323,37 @@ async def on_message(message):
         log(f"[EDIT] Edited thinking message with AI response for {message.author.name}")
     except discord.Forbidden:
         log("[EDIT] Cannot edit message - missing permissions")
-        # Fallback to sending a new message
+        # Fallback to sending a new reply message
         try:
-            await message.channel.send(f"{message.author.mention} {ai_response}")
-            log(f"[FALLBACK] Sent new message as fallback for {message.author.name}")
+            await message.reply(ai_response)
+            log(f"[FALLBACK] Sent reply fallback for {message.author.name}")
         except discord.Forbidden:
-            log("[FALLBACK] Cannot send messages in this channel")
+            log("[FALLBACK] Cannot reply in this channel")
+            try:
+                await message.channel.send(f"{message.author.mention} {ai_response}")
+                log(f"[FALLBACK] Sent channel message fallback for {message.author.name}")
+            except Exception as e:
+                log(f"[FALLBACK] Channel send failed: {e}")
         except Exception as e:
-            log(f"[FALLBACK] Send failed: {e}")
+            log(f"[FALLBACK] Reply failed: {e}")
+            try:
+                await message.channel.send(f"{message.author.mention} {ai_response}")
+                log(f"[FALLBACK] Sent channel message fallback for {message.author.name}")
+            except Exception as e2:
+                log(f"[FALLBACK] Channel send failed: {e2}")
     except Exception as e:
         log(f"[EDIT] Edit failed: {e}")
-        # Fallback to sending a new message
+        # Fallback to sending a new reply message
         try:
-            await message.channel.send(f"{message.author.mention} {ai_response}")
-            log(f"[FALLBACK] Sent new message as fallback for {message.author.name}")
+            await message.reply(ai_response)
+            log(f"[FALLBACK] Sent reply fallback for {message.author.name}")
         except Exception as e2:
-            log(f"[FALLBACK] Fallback send failed: {e2}")
+            log(f"[FALLBACK] Reply failed: {e2}")
+            try:
+                await message.channel.send(f"{message.author.mention} {ai_response}")
+                log(f"[FALLBACK] Sent channel message fallback for {message.author.name}")
+            except Exception as e3:
+                log(f"[FALLBACK] Channel send failed: {e3}")
 
 
 def run(token: Optional[str] = None) -> None:
