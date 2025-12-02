@@ -1,0 +1,13 @@
+services:
+  discord-bot:
+    build: .
+    container_name: discord-esquie-bot
+    env_file:
+      - .env
+    restart: unless-stopped
+    # Optional: Add logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
