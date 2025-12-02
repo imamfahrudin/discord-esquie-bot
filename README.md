@@ -5,17 +5,22 @@
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com)
 [![Pollinations.AI](https://img.shields.io/badge/Pollinations.AI-%23FF6B6B.svg?style=for-the-badge&logo=ai&logoColor=white)](https://pollinations.ai)
 
-An AI-powered Discord bot built with Python and discord.py that provides intelligent responses using Pollinations.AI.
+An AI-powered Discord bot built with Python and discord.py that provides intelligent, multilingual responses using Pollinations.AI. Features advanced conversation context tracking, reaction-based message management, and personalized interactions.
 
 ## Features
 
-- 🤖 **AI-Powered Responses**: Uses Pollinations.AI API for natural, intelligent conversations
+- 🤖 **AI-Powered Responses**: Uses Pollinations.AI API for natural, intelligent conversations with consistent responses (seeded)
 - 💬 **Mention-Based Interaction**: Responds to @mentions with context-aware AI responses
-- 🔄 **Chained Conversation Context**: Maintains full conversation history by following reply chains
-- � **Docker Deployment**: Easy containerized deployment with Docker Compose
+- 🔄 **Chained Conversation Context**: Maintains full conversation history by following Discord reply chains (up to 10 messages)
+- 🌍 **Multilingual Support**: Responds in multiple languages including English, Spanish, French, German, Italian, Portuguese, Indonesian, and others
+- 🗑️ **Reaction-Based Deletion**: Users can delete bot responses by reacting with X (❌, ✖️, ❎, x, X) emojis
+- 👤 **Personalized Interactions**: Uses user display names and properly handles Discord mentions in responses
+- 📅 **Time-Aware Responses**: Includes current date and time in AI context for temporal awareness
+- 🐳 **Docker Deployment**: Easy containerized deployment with Docker Compose
 - ⚙️ **Environment Configuration**: Secure token management via environment variables
-- 📝 **Smart Message Processing**: Handles short prompts and provides contextual responses
-- 📊 **Real-time Logging**: Comprehensive logging visible in Docker containers
+- 📝 **Smart Message Processing**: Handles short prompts with contextual expansion
+- 📊 **Real-time Logging**: Comprehensive logging visible in Docker containers with immediate flush
+- 🔄 **Fallback Error Handling**: Multiple fallback strategies for message delivery (edit → reply → channel send)
 
 ## Prerequisites
 
@@ -60,6 +65,7 @@ DISCORD_BOT_TOKEN=your_actual_bot_token_here
 In the Discord Developer Portal, ensure your bot has these permissions:
 - Send Messages
 - Read Message History
+- Add Reactions
 - Use Slash Commands (optional)
 
 **Note**: This bot uses only basic intents and doesn't require privileged gateway intents.
@@ -94,7 +100,7 @@ python -c "from esquie_bot import run; run()"
 
 ## Usage
 
-The bot listens for messages that mention it (@YourBotName). When mentioned, it processes the message content and responds with AI-generated replies.
+The bot listens for messages that mention it (@YourBotName) or replies to its messages. When triggered, it processes the message content and responds with AI-generated replies that maintain conversation context.
 
 ### Examples
 
@@ -102,6 +108,12 @@ The bot listens for messages that mention it (@YourBotName). When mentioned, it 
 ```
 User: @YourBot hello!
 Bot: Hello! How are you doing today? I'm here to help with any questions you might have!
+```
+
+**Multilingual Responses:**
+```
+User: @YourBot ¿Cómo estás?
+Bot: ¡Hola! Estoy muy bien, gracias por preguntar. ¿En qué puedo ayudarte hoy?
 ```
 
 **Contextual Responses:**
@@ -116,9 +128,15 @@ User: @YourBot hi
 Bot: Hello! Someone said 'hi'. Can you respond to that? Hi there! How can I assist you today?
 ```
 
+**Mention Handling:**
+```
+User: @YourBot tell @John about the meeting
+Bot: <@123456789> Hey John! There's a meeting scheduled for tomorrow at 3 PM. Please let me know if you can attend.
+```
+
 ## Conversation Context
 
-The bot now supports natural, chained conversations by following Discord's reply chains. When you reply to a bot message, it reconstructs the entire conversation history to provide coherent, context-aware responses.
+The bot supports natural, chained conversations by following Discord's reply chains and maintaining conversation history. It reconstructs the entire conversation context to provide coherent, context-aware responses.
 
 ### Chained Conversation Example
 
@@ -162,6 +180,25 @@ User: [replying to bot] Tell me more about the Eiffel Tower
 Bot: The Eiffel Tower is an iron lattice tower located in Paris, France. It was built in 1889 for the World's Fair and stands at 324 meters tall. It's one of the most visited monuments in the world, receiving over 7 million visitors annually. The tower was originally intended to be temporary but became a permanent symbol of Paris.
 ```
 
+## Reaction-Based Message Management
+
+Users can delete bot responses by reacting to them with X emojis:
+- ❌ (cross mark)
+- ✖️ (heavy multiplication x)
+- ❎ (negative squared cross mark)
+- x or X (letter x)
+
+**Only the original user who triggered the bot response can delete it.**
+
+**Example:**
+```
+User: @YourBot tell me a joke
+Bot: Why don't scientists trust atoms? Because they make up everything! 🤣
+
+User: [reacts with ❌ to bot's message]
+[Bot's message gets deleted]
+```
+
 ## Configuration
 
 The bot uses environment variables for configuration:
@@ -174,9 +211,27 @@ The bot integrates with [Pollinations.AI](https://pollinations.ai), a free AI pl
 
 - **API Endpoint**: `https://text.pollinations.ai/openai`
 - **Model**: OpenAI-compatible with consistent responses (seed=42)
-- **Message Format**: System prompt + user message for context
+- **Message Format**: System prompt + user message + conversation history
+- **Context Window**: Limited to last 10 messages to prevent token limits
+- **Multilingual**: System prompt includes support for multiple languages
+- **Temporal Awareness**: Current date/time included in system context
 - **Error Handling**: Graceful fallbacks when API is unavailable
-- **Rate Limits**: Respects API limitations with appropriate timeouts
+- **Rate Limits**: Respects API limitations with 60-second timeouts
+
+## Architecture
+
+- **Package Structure**: Main logic lives in `esquie_bot/main.py`; `bot.py` is a thin entrypoint that calls `esquie_bot.run()` for backward compatibility
+- **Event-Driven**: Uses discord.py's event system for message processing and reactions
+- **AI Integration**: RESTful API calls to Pollinations.AI with conversation history
+- **Docker Optimized**: Logging with immediate flush for container visibility
+- **Error Resilient**: Multiple fallback strategies (edit → reply → channel send) for message delivery
+- **Async Processing**: Non-blocking HTTP requests using thread pools
+
+## Dependencies
+
+- `discord.py==2.3.2` - Discord API wrapper
+- `python-dotenv==1.0.0` - Environment variable management
+- `requests==2.31.0` - HTTP client for AI API calls
 
 ## Troubleshooting
 
@@ -192,13 +247,19 @@ The bot integrates with [Pollinations.AI](https://pollinations.ai), a free AI pl
 
 ### Permission errors
 - Ensure the bot has "Send Messages" permission in your server
-- The bot needs "Read Message History" to see mentions
+- The bot needs "Read Message History" to see mentions and build conversation context
+- "Add Reactions" permission is required for reaction-based deletion
 
 ### Privileged Intents Error
 If you see `PrivilegedIntentsRequired` error:
 - The bot code has been updated to avoid requiring privileged intents
 - Restart the bot with `docker-compose restart`
 - If the error persists, check that you're using the latest bot code
+
+### Reaction deletion not working
+- Ensure the bot has "Add Reactions" permission
+- Only the original user who triggered the response can delete it
+- The bot message must be a reply to the user's message
 
 ### Logs
 Check the logs for any errors:
@@ -210,13 +271,9 @@ The bot provides detailed logging including:
 - `[STARTUP]`: Bot initialization and connection status
 - `[MENTION]`: When users mention the bot
 - `[CONTENT]`: Extracted message content
+- `[HISTORY]`: Conversation context building
 - `[API REQUEST/SUCCESS/ERROR]`: AI API interaction details
 - `[REPLY]`: Successful message responses
-
-- ## Architecture
-
-- **Package**: Main logic lives in `esquie_bot/main.py`; `bot.py` is a thin entrypoint that calls `esquie_bot.run()` for backward compatibility.
-- **Event-Driven**: Uses discord.py's event system
-- **AI Integration**: RESTful API calls to Pollinations.AI
-- **Docker Optimized**: Logging with immediate flush for container visibility
-- **Error Resilient**: Graceful handling of API failures and network issues
+- `[DELETE]`: Reaction-based message deletion
+- `[THINKING]`: Thinking message sent
+- `[EDIT/FALLBACK]`: Response delivery methods
