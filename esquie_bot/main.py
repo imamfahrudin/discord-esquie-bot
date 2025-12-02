@@ -169,6 +169,38 @@ async def on_ready():
 
 
 @bot.event
+async def on_reaction_add(reaction, user):
+    """Called when a reaction is added to a message."""
+    # Ignore bot's own reactions
+    if user == bot.user:
+        return
+    
+    # Check if reaction is X mark (❌ or :x:)
+    if str(reaction.emoji) not in ['❌', '✖️', '❎', 'x', 'X']:
+        return
+    
+    # Check if the message is from the bot
+    if reaction.message.author != bot.user:
+        return
+    
+    # Check if user has permission to delete messages in this channel
+    if not reaction.message.channel.permissions_for(user).manage_messages:
+        # Allow anyone to delete bot messages with X reaction, or check for specific permissions
+        # For now, let's allow anyone to delete bot messages with X reaction
+        pass
+    
+    try:
+        await reaction.message.delete()
+        log(f"[DELETE] Deleted bot message due to X reaction from {user.name}")
+    except discord.Forbidden:
+        log(f"[DELETE] Cannot delete message - missing permissions for user {user.name}")
+    except discord.NotFound:
+        log("[DELETE] Message already deleted")
+    except Exception as e:
+        log(f"[DELETE] Error deleting message: {e}")
+
+
+@bot.event
 async def on_message(message):
     """Called whenever a message is sent in a channel the bot can see."""
     # Prevent responding to own messages
