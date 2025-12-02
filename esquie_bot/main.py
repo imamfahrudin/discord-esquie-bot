@@ -255,6 +255,10 @@ async def on_message(message):
     
     personalized_content = f"[{user_display_name}]: {content}{mention_context}{reference_context}"
 
+    # Send thinking message first
+    thinking_message = await message.channel.send("🤔 Thinking...")
+    log(f"[THINKING] Sent thinking message for user {message.author.name}")
+
     ai_response = await get_ai_response(personalized_content, conversation_history)
 
     if not ai_response:
@@ -263,26 +267,28 @@ async def on_message(message):
 
     log(f"[RESPONSE] AI response: '{ai_response[:100]}...'")
 
-    # Try to reply, with fallback to channel send
+    # Edit the thinking message with the actual response
     try:
-        await message.reply(ai_response)
-        log(f"[REPLY] Sent reply to {message.author.name}")
+        await thinking_message.edit(content=ai_response)
+        log(f"[EDIT] Edited thinking message with AI response for {message.author.name}")
     except discord.Forbidden:
-        log("[REPLY] Cannot reply - missing permissions")
+        log("[EDIT] Cannot edit message - missing permissions")
+        # Fallback to sending a new message
         try:
             await message.channel.send(f"{message.author.mention} {ai_response}")
-            log(f"[REPLY] Sent fallback channel message to {message.author.name}")
+            log(f"[FALLBACK] Sent new message as fallback for {message.author.name}")
         except discord.Forbidden:
-            log("[REPLY] Cannot send messages in this channel")
-        except Exception as e2:
-            log(f"[REPLY] Fallback send failed: {e2}")
+            log("[FALLBACK] Cannot send messages in this channel")
+        except Exception as e:
+            log(f"[FALLBACK] Send failed: {e}")
     except Exception as e:
-        log(f"[REPLY] Reply failed: {e}")
+        log(f"[EDIT] Edit failed: {e}")
+        # Fallback to sending a new message
         try:
             await message.channel.send(f"{message.author.mention} {ai_response}")
-            log(f"[REPLY] Sent fallback channel message to {message.author.name}")
+            log(f"[FALLBACK] Sent new message as fallback for {message.author.name}")
         except Exception as e2:
-            log(f"[REPLY] Fallback send failed: {e2}")
+            log(f"[FALLBACK] Fallback send failed: {e2}")
 
 
 def run(token: Optional[str] = None) -> None:
