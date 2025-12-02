@@ -21,13 +21,38 @@ intents = discord.Intents.default()
 bot = discord.Client(intents=intents)
 
 
+def parse_discord_mentions(message: discord.Message) -> Dict[str, str]:
+    """Parse Discord mentions in a message and return a mapping of usernames to user IDs."""
+    mention_map = {}
+    
+    # Find all Discord mention patterns: <@id> or <@!id>
+    import re
+    mention_pattern = r'<@!?(\d+)>'
+    mentions = re.findall(mention_pattern, message.content)
+    
+    for user_id in mentions:
+        try:
+            # Get the member object to access display name
+            member = message.guild.get_member(int(user_id))
+            if member:
+                # Map display name to user ID for AI context
+                mention_map[member.display_name] = user_id
+                # Also map username as fallback
+                if member.display_name != member.name:
+                    mention_map[member.name] = user_id
+        except Exception as e:
+            log(f"[MENTION] Failed to resolve user ID {user_id}: {e}")
+    
+    return mention_map
+
+
 def get_ai_response(user_message: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
     """Get response from Pollinations.AI API with full conversation context."""
     try:
         url = "https://text.pollinations.ai/openai"
 
         messages = [
-            {"role": "system", "content": f"You are Esquie, a helpful AI assistant that responds naturally to user messages in multiple languages including English, Spanish, French, German, Italian, Portuguese, Indonesian, and others. Match the user's language when possible. Current date and time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}. Try to respond in a single paragraph and avoid complex formatting."}
+            {"role": "system", "content": f"You are Esquie, a helpful AI assistant that responds naturally to user messages in multiple languages including English, Spanish, French, German, Italian, Portuguese, Indonesian, and others. Match the user's language when possible. Current date and time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}. Try to respond in a single paragraph and avoid complex formatting. When users mention other Discord users in their messages, use Discord mention format <@user_id> in your responses instead of plain usernames."}
         ]
 
         # Limit conversation history to prevent API token limits (keep last 10 messages)
@@ -201,7 +226,16 @@ async def on_message(message):
 
     # Include user's display name (nickname) in the prompt for personalization
     user_display_name = message.author.display_name
-    personalized_content = f"[{user_display_name}]: {content}"
+    
+    # Parse Discord mentions and create context
+    mention_map = parse_discord_mentions(message)
+    mention_context = ""
+    if mention_map:
+        mention_list = [f"{name}({user_id})" for name, user_id in mention_map.items()]
+        mention_context = f" [Mentioned users: {', '.join(mention_list)}]"
+        log(f"[MENTION] Found mentions: {mention_context}")
+    
+    personalized_content = f"[{user_display_name}]: {content}{mention_context}"
 
     ai_response = get_ai_response(personalized_content, conversation_history)
 
