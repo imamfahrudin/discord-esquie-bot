@@ -3,15 +3,18 @@
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
 [![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://python.org)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com)
+[![Pollinations.AI](https://img.shields.io/badge/Pollinations.AI-%23FF6B6B.svg?style=for-the-badge&logo=ai&logoColor=white)](https://pollinations.ai)
 
-A simple and lightweight Discord bot built with Python and discord.py.
+An AI-powered Discord bot built with Python and discord.py that provides intelligent responses using Pollinations.AI.
 
 ## Features
 
-- Responds to mentions with "Hello [username]!"
-- Easy deployment with Docker Compose
-- Environment-based configuration
-- Lightweight and simple
+- 🤖 **AI-Powered Responses**: Uses Pollinations.AI API for natural, intelligent conversations
+- 💬 **Mention-Based Interaction**: Responds to @mentions with context-aware AI responses
+- 🐳 **Docker Deployment**: Easy containerized deployment with Docker Compose
+- ⚙️ **Environment Configuration**: Secure token management via environment variables
+- 📝 **Smart Message Processing**: Handles short prompts and provides contextual responses
+- 🔄 **Real-time Logging**: Comprehensive logging visible in Docker containers
 
 ## Prerequisites
 
@@ -87,13 +90,27 @@ python bot.py
 
 ## Usage
 
-The bot listens for messages that mention it (@YourBotName). When mentioned, it replies with:
+The bot listens for messages that mention it (@YourBotName). When mentioned, it processes the message content and responds with AI-generated replies.
 
+### Examples
+
+**Basic Interaction:**
 ```
-Hello [username]!
+User: @YourBot hello!
+Bot: Hello! How are you doing today? I'm here to help with any questions you might have!
 ```
 
-For example, if a user named "John" mentions the bot, it will reply: "Hello John!"
+**Contextual Responses:**
+```
+User: @YourBot what's the weather like?
+Bot: I'd be happy to help with weather information! Could you let me know which city you're interested in? I can provide current conditions and forecasts.
+```
+
+**Short Prompts:**
+```
+User: @YourBot hi
+Bot: Hello! Someone said 'hi'. Can you respond to that? Hi there! How can I assist you today?
+```
 
 ## Configuration
 
@@ -101,12 +118,27 @@ The bot uses environment variables for configuration:
 
 - `DISCORD_BOT_TOKEN`: Your Discord bot token (required)
 
+## AI Integration
+
+The bot integrates with [Pollinations.AI](https://pollinations.ai), a free AI platform:
+
+- **API Endpoint**: `https://text.pollinations.ai/openai`
+- **Model**: OpenAI-compatible with consistent responses (seed=42)
+- **Message Format**: System prompt + user message for context
+- **Error Handling**: Graceful fallbacks when API is unavailable
+- **Rate Limits**: Respects API limitations with appropriate timeouts
+
 ## Troubleshooting
 
 ### Bot doesn't respond to mentions
 - Make sure the bot has been invited to your server with proper permissions
 - Check that the bot token in `.env` is correct
 - Verify the bot is online: `docker-compose ps`
+
+### AI responses not working
+- Check API connectivity: `docker-compose logs discord-bot`
+- Verify Pollinations.AI service is available
+- Look for API error messages in logs
 
 ### Permission errors
 - Ensure the bot has "Send Messages" permission in your server
@@ -123,3 +155,18 @@ Check the logs for any errors:
 ```bash
 docker-compose logs discord-bot
 ```
+
+The bot provides detailed logging including:
+- `[STARTUP]`: Bot initialization and connection status
+- `[MENTION]`: When users mention the bot
+- `[CONTENT]`: Extracted message content
+- `[API REQUEST/SUCCESS/ERROR]`: AI API interaction details
+- `[REPLY]`: Successful message responses
+
+## Architecture
+
+- **Single File**: All logic contained in `bot.py`
+- **Event-Driven**: Uses discord.py's event system
+- **AI Integration**: RESTful API calls to Pollinations.AI
+- **Docker Optimized**: Logging with immediate flush for container visibility
+- **Error Resilient**: Graceful handling of API failures and network issues
