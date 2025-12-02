@@ -27,7 +27,7 @@ def get_ai_response(user_message: str, conversation_history: Optional[List[Dict[
         url = "https://text.pollinations.ai/openai"
 
         messages = [
-            {"role": "system", "content": f"You are a helpful AI assistant that responds naturally to user messages in multiple languages including English, Spanish, French, German, Italian, Portuguese, Indonesian, and others. Match the user's language when possible. Current date and time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}. Try to respond in a single paragraph and avoid complex formatting."}
+            {"role": "system", "content": f"You are Esquie, a helpful AI assistant that responds naturally to user messages in multiple languages including English, Spanish, French, German, Italian, Portuguese, Indonesian, and others. Match the user's language when possible. Current date and time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}. Try to respond in a single paragraph and avoid complex formatting."}
         ]
 
         # Limit conversation history to prevent API token limits (keep last 10 messages)
@@ -199,7 +199,11 @@ async def on_message(message):
     if conversation_history:
         log(f"[CONTEXT] Including {len(conversation_history)} messages from conversation history")
 
-    ai_response = get_ai_response(content, conversation_history)
+    # Include user's display name (nickname) in the prompt for personalization
+    user_display_name = message.author.display_name
+    personalized_content = f"[{user_display_name}]: {content}"
+
+    ai_response = get_ai_response(personalized_content, conversation_history)
 
     if not ai_response:
         log("[ERROR] Got empty response from AI")
