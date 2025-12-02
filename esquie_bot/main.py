@@ -4,6 +4,7 @@ import re
 import requests
 import sys
 import json
+from datetime import datetime
 from dotenv import load_dotenv
 from typing import List, Dict, Any, Optional
 
@@ -26,7 +27,7 @@ def get_ai_response(user_message: str, conversation_history: Optional[List[Dict[
         url = "https://text.pollinations.ai/openai"
 
         messages = [
-            {"role": "system", "content": "You are a helpful AI assistant that responds naturally to user messages."}
+            {"role": "system", "content": f"You are a helpful AI assistant that responds naturally to user messages in multiple languages including English, Spanish, French, German, Italian, Portuguese, Indonesian, and others. Match the user's language when possible. Current date and time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}. Try to respond in a single paragraph and avoid complex formatting."}
         ]
 
         # Limit conversation history to prevent API token limits (keep last 10 messages)
