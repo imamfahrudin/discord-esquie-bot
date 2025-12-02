@@ -30,7 +30,7 @@ intents = discord.Intents.default()
 
 bot = discord.Client(intents=intents)
 
-def get_ai_response(user_message):
+def get_ai_response(user_message, previous_bot_message=None):
     """Get response from Pollinations.AI API"""
     try:
         # Use the OpenAI-compatible endpoint
@@ -38,9 +38,16 @@ def get_ai_response(user_message):
         
         # Build messages array with system and user messages
         messages = [
-            {"role": "system", "content": "You are a helpful AI assistant that responds naturally to user messages."},
-            {"role": "user", "content": user_message}
+            {"role": "system", "content": "You are a helpful AI assistant that responds naturally to user messages."}
         ]
+        
+        # Add previous bot message as assistant role if available
+        if previous_bot_message:
+            messages.append({"role": "assistant", "content": previous_bot_message})
+            log(f"[CONTEXT] Added previous bot message to conversation")
+        
+        # Add current user message
+        messages.append({"role": "user", "content": user_message})
         
         # Use seed for consistent responses
         data = {"model": "openai", "messages": messages, "seed": 42}
@@ -50,6 +57,12 @@ def get_ai_response(user_message):
         response.raise_for_status()
 
         result = response.json()['choices'][0]['message']['content'].strip()
+        
+        # Clean up response if it contains separators (sometimes AI adds extra content after ---)
+        if '---' in result:
+            log("  > '---' character found. Cleaning response...")
+            result = result.split('---')[0].strip()
+        
         log(f"[API SUCCESS] Got response ({len(result)} characters)")
         return result
     except requests.RequestException as e:
@@ -76,37 +89,66 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
-    # Check if the bot is mentioned in the message
-    if bot.user.mentioned_in(message):
-        log(f"[MENTION] User {message.author.name} mentioned the bot")
+    # Check if the bot is mentioned in the message OR if it's a reply to the bot
+    is_mention = bot.user.mentioned_in(message)
+    is_reply_to_bot = False
+    previous_bot_message = None
 
-        # Extract message content after removing the mention
-        content = message.content
+    # Check if this is a reply to one of our messages
+    if message.reference and message.reference.message_id:
+        try:
+            # Fetch the referenced message
+            referenced_msg = await message.channel.fetch_message(message.reference.message_id)
+            # Check if the referenced message is from the bot
+            if referenced_msg.author == bot.user:
+                is_reply_to_bot = True
+                previous_bot_message = referenced_msg.content
+                log(f"[REPLY] User {message.author.name} replied to bot message: '{previous_bot_message[:50]}...'")
+        except discord.NotFound:
+            log(f"[REPLY] Referenced message not found")
+        except Exception as e:
+            log(f"[REPLY] Error fetching referenced message: {e}")
 
+    # Only respond if it's a mention or a reply to the bot
+    if not (is_mention or is_reply_to_bot):
+        return
+
+    log(f"[INTERACTION] User {message.author.name} - Mention: {is_mention}, Reply: {is_reply_to_bot}")
+
+    # Extract message content after removing the mention (if it's a mention)
+    content = message.content
+
+    if is_mention:
         # Remove the bot mention from the content
-        # Discord mentions look like <@123456789> or <@!123456789>
         content = re.sub(r'<@!?{}>'.format(bot.user.id), '', content).strip()
+        log(f"[CONTENT] Extracted content after mention removal: '{content}'")
 
-        log(f"[CONTENT] Extracted content: '{content}'")
-
-        # If there's no content after removing mention, use a default prompt
-        if not content:
+    # If there's no content, use a default prompt
+    if not content:
+        if is_reply_to_bot:
+            content = "Please continue our conversation."
+        else:
             content = "Hello! Can you introduce yourself?"
-            log(f"[DEFAULT] Using default prompt: '{content}'")
-        elif len(content.strip()) < 3:
-            # Handle very short prompts by adding context
+        log(f"[DEFAULT] Using default prompt: '{content}'")
+    elif len(content.strip()) < 3:
+        # Handle very short prompts by adding context
+        if is_reply_to_bot:
+            content = f"Continuing our conversation: '{content.strip()}'"
+        else:
             content = f"Hello! Someone said '{content.strip()}'. Can you respond to that?"
-            log(f"[SHORT] Expanded short prompt to: '{content}'")
+        log(f"[SHORT] Expanded short prompt to: '{content}'")
 
-        # Get AI response
-        log(f"[API] Calling Pollinations.AI API with prompt: '{content}'")
-        ai_response = get_ai_response(content)
+    # Get AI response with conversation context
+    log(f"[API] Calling Pollinations.AI API with prompt: '{content}'")
+    if previous_bot_message:
+        log(f"[CONTEXT] Including previous bot message in conversation")
+    ai_response = get_ai_response(content, previous_bot_message)
 
-        log(f"[RESPONSE] AI response: '{ai_response[:100]}...'")
+    log(f"[RESPONSE] AI response: '{ai_response[:100]}...'")
 
-        # Send the AI response
-        await message.reply(ai_response)
-        log(f"[REPLY] Sent reply to {message.author.name}")
+    # Send the AI response
+    await message.reply(ai_response)
+    log(f"[REPLY] Sent reply to {message.author.name}")
 
 # Run the bot
 bot.run(TOKEN)

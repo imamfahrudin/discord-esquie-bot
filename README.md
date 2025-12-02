@@ -11,10 +11,11 @@ An AI-powered Discord bot built with Python and discord.py that provides intelli
 
 - 🤖 **AI-Powered Responses**: Uses Pollinations.AI API for natural, intelligent conversations
 - 💬 **Mention-Based Interaction**: Responds to @mentions with context-aware AI responses
-- 🐳 **Docker Deployment**: Easy containerized deployment with Docker Compose
+- � **Conversation Context**: Maintains conversation history when users reply to bot messages
+- �🐳 **Docker Deployment**: Easy containerized deployment with Docker Compose
 - ⚙️ **Environment Configuration**: Secure token management via environment variables
 - 📝 **Smart Message Processing**: Handles short prompts and provides contextual responses
-- 🔄 **Real-time Logging**: Comprehensive logging visible in Docker containers
+- � **Real-time Logging**: Comprehensive logging visible in Docker containers
 
 ## Prerequisites
 
@@ -110,6 +111,30 @@ Bot: I'd be happy to help with weather information! Could you let me know which 
 ```
 User: @YourBot hi
 Bot: Hello! Someone said 'hi'. Can you respond to that? Hi there! How can I assist you today?
+```
+
+## Conversation Context
+
+The bot now supports natural conversations by maintaining context when users reply to its messages. When you reply to a bot message (using Discord's reply feature), the bot includes the previous response as context for more coherent follow-up conversations.
+
+### Examples
+
+**Multi-turn Conversation:**
+```
+User: @YourBot tell me about Python
+Bot: Python is a high-level programming language known for its simplicity and readability. It's widely used for web development, data science, AI, and automation. What specifically would you like to know about Python?
+
+User: [replying to bot] How do I install it?
+Bot: To install Python, you can download it from the official website at python.org. They offer installers for Windows, macOS, and Linux. Make sure to check "Add Python to PATH" during installation on Windows. Would you like me to guide you through the installation process?
+```
+
+**Context-Aware Responses:**
+```
+User: @YourBot what's the capital of France?
+Bot: The capital of France is Paris, often called the "City of Light." It's home to iconic landmarks like the Eiffel Tower and Louvre Museum.
+
+User: [replying to bot] Tell me more about the Eiffel Tower
+Bot: The Eiffel Tower is an iron lattice tower located in Paris, France. It was built in 1889 for the World's Fair and stands at 324 meters tall. It's one of the most visited monuments in the world, receiving over 7 million visitors annually. The tower was originally intended to be temporary but became a permanent symbol of Paris.
 ```
 
 ## Configuration

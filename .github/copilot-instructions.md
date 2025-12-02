@@ -18,26 +18,47 @@ AI-powered Discord bot built with discord.py that responds to mentions with inte
 async def on_message(message):
     if message.author == bot.user:
         return
-    if bot.user.mentioned_in(message):
-        # Extract content after mention
-        content = re.sub(r'<@!?{}>'.format(bot.user.id), '', message.content).strip()
-        
-        # Handle short prompts
-        if len(content.strip()) < 3:
-            content = f"Hello! Someone said '{content.strip()}'. Can you respond to that?"
-        
-        # Get AI response
-        ai_response = get_ai_response(content)
-        await message.reply(ai_response)
+    
+    # Check for mentions OR replies to bot messages
+    is_mention = bot.user.mentioned_in(message)
+    is_reply_to_bot = False
+    previous_bot_message = None
+    
+    # Detect replies to bot messages for conversation context
+    if message.reference and message.reference.message_id:
+        try:
+            referenced_msg = await message.channel.fetch_message(message.reference.message_id)
+            if referenced_msg.author == bot.user:
+                is_reply_to_bot = True
+                previous_bot_message = referenced_msg.content
+        except discord.NotFound:
+            pass
+    
+    if not (is_mention or is_reply_to_bot):
+        return
+    
+    # Extract content and get AI response with context
+    content = message.content
+    if is_mention:
+        content = re.sub(r'<@!?{}>'.format(bot.user.id), '', content).strip()
+    
+    ai_response = get_ai_response(content, previous_bot_message)
+    await message.reply(ai_response)
 ```
 
-### Pollinations.AI API Integration
+### Pollinations.AI API Integration with Context
 ```python
-def get_ai_response(user_message):
+def get_ai_response(user_message, previous_bot_message=None):
     messages = [
-        {"role": "system", "content": "You are a helpful AI assistant that responds naturally to user messages."},
-        {"role": "user", "content": user_message}
+        {"role": "system", "content": "You are a helpful AI assistant that responds naturally to user messages."}
     ]
+    
+    # Include previous bot response for conversation context
+    if previous_bot_message:
+        messages.append({"role": "assistant", "content": previous_bot_message})
+    
+    messages.append({"role": "user", "content": user_message})
+    
     data = {"model": "openai", "messages": messages, "seed": 42}
     
     response = requests.post("https://text.pollinations.ai/openai", 
@@ -97,3 +118,4 @@ docker-compose down           # Stop bot
 - **Logging**: Docker logs configured with size limits (10m, 3 files) and immediate flush
 - **Restart policy**: `unless-stopped` for reliability
 - **AI Processing**: Handles short prompts by adding context, provides natural responses
+- **Conversation Context**: Maintains conversation history when users reply to bot messages for coherent multi-turn conversations
