@@ -5,6 +5,7 @@ import requests
 import sys
 import json
 from dotenv import load_dotenv
+from typing import List, Dict, Any, Optional
 
 
 def log(message: str) -> None:
@@ -19,7 +20,7 @@ intents = discord.Intents.default()
 bot = discord.Client(intents=intents)
 
 
-def get_ai_response(user_message, conversation_history=None):
+def get_ai_response(user_message: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
     """Get response from Pollinations.AI API with full conversation context."""
     try:
         url = "https://text.pollinations.ai/openai"
@@ -28,26 +29,33 @@ def get_ai_response(user_message, conversation_history=None):
             {"role": "system", "content": "You are a helpful AI assistant that responds naturally to user messages."}
         ]
 
+        # Limit conversation history to prevent API token limits (keep last 10 messages)
         if conversation_history:
-            messages.extend(conversation_history)
-            log(f"[CONTEXT] Added {len(conversation_history)} messages from conversation history")
+            limited_history = conversation_history[-10:] if len(conversation_history) > 10 else conversation_history
+            messages.extend(limited_history)
+            log(f"[CONTEXT] Added {len(limited_history)} messages from conversation history (limited from {len(conversation_history)})")
 
         messages.append({"role": "user", "content": user_message})
 
         data = {"model": "openai", "messages": messages, "seed": 42}
 
         log(f"[API REQUEST] POST to {url} with {len(messages)} total messages")
-        response = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=60)
+        # Reduce timeout from 60s to 15s for better responsiveness
+        response = requests.post(url, headers={"Content-Type": "application/json"}, data=json.dumps(data), timeout=15)
         response.raise_for_status()
 
         result = response.json()['choices'][0]['message']['content'].strip()
 
+        # Clean response artifacts (keep minimal cleaning)
         if '---' in result:
             log("  > '---' character found. Cleaning response...")
             result = result.split('---')[0].strip()
 
         log(f"[API SUCCESS] Got response ({len(result)} characters)")
         return result
+    except requests.Timeout:
+        log("[API ERROR] Request timed out")
+        return "Sorry, the AI is taking too long to respond. Please try again!"
     except requests.RequestException as e:
         log(f"[API ERROR] Request failed: {e}")
         return "Sorry, I'm having trouble connecting to my AI brain right now. Please try again later!"
@@ -59,8 +67,8 @@ def get_ai_response(user_message, conversation_history=None):
         return "Oops! Something went wrong. Please try again!"
 
 
-async def build_conversation_history(message, max_depth=10):
-    """Build conversation history by following reply chain."""
+async def build_conversation_history(message: discord.Message, max_depth: int = 10) -> List[Dict[str, str]]:
+    """Build conversation history by following reply chain, only including bot-related messages."""
     history = []
     current_msg = message
     depth = 0
@@ -68,40 +76,50 @@ async def build_conversation_history(message, max_depth=10):
     log(f"[HISTORY] Building conversation history starting from: '{message.content[:50]}...'")
 
     while current_msg and depth < max_depth:
+        # Skip the current message (it's the new user input)
         if current_msg.id == message.id:
             if current_msg.reference and current_msg.reference.message_id:
                 try:
                     current_msg = await current_msg.channel.fetch_message(current_msg.reference.message_id)
+                    depth += 1
+                    continue
                 except discord.NotFound:
-                    current_msg = None
+                    log("[HISTORY] Referenced message not found while skipping current message")
+                    break
                 except Exception as e:
                     log(f"[HISTORY] Error fetching referenced message while skipping current: {e}")
-                    current_msg = None
-            else:
-                current_msg = None
-            depth += 1
-            continue
-
-        try:
-            if current_msg.author == bot.user:
-                role = "assistant"
-                log(f"[HISTORY] Added bot message: '{current_msg.content[:30]}...'")
-            else:
-                role = "user"
-                log(f"[HISTORY] Added user message: '{current_msg.content[:30]}...'")
-
-            history.insert(0, {"role": role, "content": current_msg.content})
-
-            if current_msg.reference and current_msg.reference.message_id:
-                current_msg = await current_msg.channel.fetch_message(current_msg.reference.message_id)
+                    break
             else:
                 break
 
-        except discord.NotFound:
-            log(f"[HISTORY] Referenced message not found at depth {depth}")
-            break
-        except Exception as e:
-            log(f"[HISTORY] Error fetching message at depth {depth}: {e}")
+        # Only include messages that are part of the bot conversation
+        is_bot_message = current_msg.author == bot.user
+        mentions_bot = bot.user.mentioned_in(current_msg)
+
+        if is_bot_message or mentions_bot:
+            role = "assistant" if is_bot_message else "user"
+            content = current_msg.content
+
+            # Clean mentions from user messages for better context
+            if not is_bot_message and mentions_bot:
+                content = re.sub(r'<@!?{}>'.format(bot.user.id), '', content).strip()
+
+            history.insert(0, {"role": role, "content": content})
+            log(f"[HISTORY] Added {role} message: '{content[:30]}...'")
+        else:
+            log(f"[HISTORY] Skipping unrelated message from {current_msg.author.name}")
+
+        # Move to the next message in the reply chain
+        if current_msg.reference and current_msg.reference.message_id:
+            try:
+                current_msg = await current_msg.channel.fetch_message(current_msg.reference.message_id)
+            except discord.NotFound:
+                log(f"[HISTORY] Referenced message not found at depth {depth}")
+                break
+            except Exception as e:
+                log(f"[HISTORY] Error fetching message at depth {depth}: {e}")
+                break
+        else:
             break
 
         depth += 1
@@ -121,13 +139,19 @@ async def on_ready():
 @bot.event
 async def on_message(message):
     """Called whenever a message is sent in a channel the bot can see."""
+    # Prevent responding to own messages
     if message.author == bot.user:
+        return
+
+    # Skip messages without content (embeds, files, etc.)
+    if not message.content and not message.reference:
         return
 
     is_mention = bot.user.mentioned_in(message)
     is_reply_to_bot = False
     conversation_history = []
 
+    # Check if this is a reply to one of our messages
     if message.reference and message.reference.message_id:
         try:
             referenced_msg = await message.channel.fetch_message(message.reference.message_id)
@@ -136,10 +160,13 @@ async def on_message(message):
                 log(f"[REPLY] User {message.author.name} replied to bot message: '{referenced_msg.content[:50]}...'")
                 conversation_history = await build_conversation_history(message)
         except discord.NotFound:
-            log(f"[REPLY] Referenced message not found")
+            log("[REPLY] Referenced message not found - might have been deleted")
+        except discord.Forbidden:
+            log("[REPLY] Cannot access referenced message - permission issue")
         except Exception as e:
             log(f"[REPLY] Error fetching referenced message: {e}")
 
+    # Only respond to mentions or replies to bot messages
     if not (is_mention or is_reply_to_bot):
         return
 
@@ -147,10 +174,12 @@ async def on_message(message):
 
     content = message.content
 
+    # Clean up the content
     if is_mention:
         content = re.sub(r'<@!?{}>'.format(bot.user.id), '', content).strip()
         log(f"[CONTENT] Extracted content after mention removal: '{content}'")
 
+    # Handle empty or very short content
     if not content:
         if is_reply_to_bot:
             content = "Please continue our conversation."
@@ -164,18 +193,34 @@ async def on_message(message):
             content = f"Hello! Someone said '{content.strip()}'. Can you respond to that?"
         log(f"[SHORT] Expanded short prompt to: '{content}'")
 
+    # Get AI response
     log(f"[API] Calling Pollinations.AI API with prompt: '{content}'")
     if conversation_history:
         log(f"[CONTEXT] Including {len(conversation_history)} messages from conversation history")
+
     ai_response = get_ai_response(content, conversation_history)
+
+    if not ai_response:
+        log("[ERROR] Got empty response from AI")
+        ai_response = "I apologize, but I couldn't generate a response right now. Please try again!"
 
     log(f"[RESPONSE] AI response: '{ai_response[:100]}...'")
 
+    # Try to reply, with fallback to channel send
     try:
         await message.reply(ai_response)
         log(f"[REPLY] Sent reply to {message.author.name}")
+    except discord.Forbidden:
+        log("[REPLY] Cannot reply - missing permissions")
+        try:
+            await message.channel.send(f"{message.author.mention} {ai_response}")
+            log(f"[REPLY] Sent fallback channel message to {message.author.name}")
+        except discord.Forbidden:
+            log("[REPLY] Cannot send messages in this channel")
+        except Exception as e2:
+            log(f"[REPLY] Fallback send failed: {e2}")
     except Exception as e:
-        log(f"[REPLY] Failed to send reply: {e}")
+        log(f"[REPLY] Reply failed: {e}")
         try:
             await message.channel.send(f"{message.author.mention} {ai_response}")
             log(f"[REPLY] Sent fallback channel message to {message.author.name}")
@@ -183,7 +228,7 @@ async def on_message(message):
             log(f"[REPLY] Fallback send failed: {e2}")
 
 
-def run(token: str | None = None) -> None:
+def run(token: Optional[str] = None) -> None:
     """Run the Discord bot. If token is None, read from DISCORD_BOT_TOKEN env var (after loading .env)."""
     load_dotenv()
     if token is None:
@@ -194,5 +239,16 @@ def run(token: str | None = None) -> None:
         log("Please create a .env file with your bot token or pass the token to run()")
         sys.exit(1)
 
+    if not token.strip():
+        log("Error: DISCORD_BOT_TOKEN is empty")
+        sys.exit(1)
+
     log("Starting bot...")
-    bot.run(token)
+    try:
+        bot.run(token)
+    except discord.LoginFailure:
+        log("Error: Invalid bot token")
+        sys.exit(1)
+    except Exception as e:
+        log(f"Error starting bot: {e}")
+        sys.exit(1)
