@@ -42,6 +42,11 @@ def parse_discord_mentions(message: discord.Message) -> Dict[str, str]:
     mentions = re.findall(mention_pattern, message.content)
     
     for user_id in mentions:
+        # Handle bot's own mention specially
+        if str(user_id) == str(bot.user.id):
+            mention_map[BOT_NAME] = "self"
+            continue
+            
         try:
             # Get the member object to access display name
             member = message.guild.get_member(int(user_id))
