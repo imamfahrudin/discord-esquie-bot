@@ -135,7 +135,11 @@ async def extract_bot_message_content(message: discord.Message) -> str:
 
     # Debug: Log all message attributes
     log(f"[EXTRACT] Message attributes: {dir(message)}")
-    log(f"[EXTRACT] Message.__dict__ keys: {list(message.__dict__.keys())}")
+    # Note: Discord.py Message objects don't have __dict__, use _state instead
+    if hasattr(message, '_state'):
+        log(f"[EXTRACT] Message has _state attribute")
+    else:
+        log(f"[EXTRACT] Message does not have _state attribute")
 
     # Add the main message content if it exists
     if message.content:
@@ -154,7 +158,15 @@ async def extract_bot_message_content(message: discord.Message) -> str:
         if message.embeds:
             log(f"[EXTRACT] Found {len(message.embeds)} embed(s)")
             for i, embed in enumerate(message.embeds, 1):
-                log(f"[EXTRACT] Processing embed {i}: type={type(embed)}, dict={embed.__dict__ if hasattr(embed, '__dict__') else 'no __dict__'}")
+                log(f"[EXTRACT] Processing embed {i}: type={type(embed)}")
+                # Try to get embed attributes safely
+                try:
+                    if hasattr(embed, '__dict__'):
+                        log(f"[EXTRACT] Embed {i} __dict__: {embed.__dict__}")
+                    else:
+                        log(f"[EXTRACT] Embed {i} attributes: {dir(embed)}")
+                except Exception as e:
+                    log(f"[EXTRACT] Error getting embed {i} attributes: {e}")
                 embed_info = []
 
                 if embed.title:
