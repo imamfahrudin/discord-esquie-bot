@@ -687,14 +687,9 @@ async def on_message(message):
     
     # Include referenced message content if replying to another user's message with bot mention
     reference_context = ""
-    if referenced_content and referenced_msg:
-        # Use enhanced context building for better bot message handling
-        reference_context = await build_enhanced_reference_context(message, referenced_msg, referenced_content)
-        log(f"[CONTEXT] Including referenced message: '{referenced_content[:50]}...'")
-    elif referenced_content:
-        # Fallback if referenced_msg is not available
+    if referenced_content:
         reference_context = f" [Replying to: {referenced_content}]"
-        log(f"[CONTEXT] Using fallback context: '{referenced_content[:50]}...'")
+        log(f"[CONTEXT] Including referenced message: '{referenced_content[:50]}...'")
     
     personalized_content = f"[{user_display_name}]: {content}{mention_context}{reference_context}"
 
