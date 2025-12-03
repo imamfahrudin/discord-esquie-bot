@@ -627,6 +627,31 @@ async def on_message(message):
                     log(f"[DEBUG] Referenced message has embeds: {bool(referenced_msg.embeds)}")
                     log(f"[DEBUG] Referenced message has attachments: {bool(referenced_msg.attachments)}")
                     log(f"[DEBUG] Original content: '{original_content}', length: {len(original_content)}")
+                    
+                    # If content is empty, this might be a message with only embeds/attachments or deleted content
+                    # Try to get something meaningful from the message
+                    if not original_content:
+                        if referenced_msg.embeds:
+                            # Try to extract text from embeds
+                            embed_texts = []
+                            for embed in referenced_msg.embeds:
+                                if embed.description:
+                                    embed_texts.append(embed.description)
+                                if embed.title:
+                                    embed_texts.append(embed.title)
+                            if embed_texts:
+                                original_content = " | ".join(embed_texts)
+                                log(f"[DEBUG] Extracted content from embeds: '{original_content[:50]}...'")
+                        elif referenced_msg.attachments:
+                            # Message has attachments but no text
+                            attachment_names = [att.filename for att in referenced_msg.attachments]
+                            original_content = f"[Attachments: {', '.join(attachment_names)}]"
+                            log(f"[DEBUG] Message has only attachments: {attachment_names}")
+                        else:
+                            # Truly empty message - might be deleted or edited
+                            log(f"[WARNING] Referenced message has no content, embeds, or attachments!")
+                            original_content = "[Empty or deleted message]"
+                    
                     # Remove bot mentions to avoid confusion in AI context
                     cleaned_content = re.sub(r'<@!?{}>'.format(bot.user.id), '', original_content).strip()
                     log(f"[DEBUG] Cleaned content: '{cleaned_content}', length: {len(cleaned_content)}")
