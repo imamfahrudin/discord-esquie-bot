@@ -27,7 +27,8 @@ def log(message: str) -> None:
 
 # Create bot intents and client instance. Event handlers are registered below.
 intents = discord.Intents.default()
-# Note: message_content intent is privileged and requires approval from Discord.
+intents.message_content = True  # Required to read message content for referenced messages
+# Note: message_content intent is privileged and requires approval from Discord Developer Portal
 bot = discord.Client(intents=intents)
 tree = discord.app_commands.CommandTree(bot)
 
