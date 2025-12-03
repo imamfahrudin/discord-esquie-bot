@@ -630,15 +630,16 @@ async def on_message(message):
         except Exception as e:
             log(f"[REPLY] Error fetching referenced message: {e}")
 
-    # Only respond to mentions or replies to bot messages that contain new images or explanation requests
+    # Only respond to mentions, replies to bot messages with new images, replies to other bots with explanation requests, or replies to users with explanation requests
     has_new_images = bool(message.attachments or message.embeds)
     is_reply_to_other_bot = bool(referenced_msg and referenced_msg.author.bot and referenced_msg.author != bot.user)
     is_explanation_request = detect_explanation_request(message.content)
+    is_reply_to_user_with_explanation = bool(referenced_msg and not referenced_msg.author.bot and is_explanation_request)
 
-    should_respond = is_mention or (is_reply_to_bot and has_new_images) or (is_reply_to_other_bot and is_explanation_request)
+    should_respond = is_mention or (is_reply_to_bot and has_new_images) or (is_reply_to_other_bot and is_explanation_request) or is_reply_to_user_with_explanation
     
     if not should_respond:
-        log(f"[SKIP] Ignoring reply without mention or new images from {message.author.name}")
+        log(f"[SKIP] Ignoring message without mention, new images, or explanation request from {message.author.name}")
         return
 
     log(f"[INTERACTION] User {message.author.name} - Mention: {is_mention}, Reply: {is_reply_to_bot}")
