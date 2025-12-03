@@ -133,6 +133,10 @@ async def extract_bot_message_content(message: discord.Message) -> str:
     log(f"[EXTRACT] Analyzing bot message from {message.author.name} (ID: {message.id})")
     log(f"[EXTRACT] Message type: {message.type}, Channel: {message.channel}, Created: {message.created_at}")
 
+    # Debug: Log all message attributes
+    log(f"[EXTRACT] Message attributes: {dir(message)}")
+    log(f"[EXTRACT] Message.__dict__ keys: {list(message.__dict__.keys())}")
+
     # Add the main message content if it exists
     if message.content:
         content_parts.append(f"Message: {message.content}")
@@ -140,37 +144,48 @@ async def extract_bot_message_content(message: discord.Message) -> str:
     else:
         log("[EXTRACT] No message content found")
 
-    # Process embeds (common in bot messages)
-    if message.embeds:
-        log(f"[EXTRACT] Found {len(message.embeds)} embed(s)")
-        for i, embed in enumerate(message.embeds, 1):
-            embed_info = []
-            
-            if embed.title:
-                embed_info.append(f"Title: {embed.title}")
-            if embed.description:
-                embed_info.append(f"Description: {embed.description}")
-            if embed.fields:
-                for field in embed.fields:
-                    embed_info.append(f"{field.name}: {field.value}")
-            if embed.footer and embed.footer.text:
-                embed_info.append(f"Footer: {embed.footer.text}")
-            if embed.author and embed.author.name:
-                embed_info.append(f"Author: {embed.author.name}")
-            if embed.timestamp:
-                embed_info.append(f"Timestamp: {embed.timestamp}")
-            if embed.url:
-                embed_info.append(f"URL: {embed.url}")
-            if embed.image and embed.image.url:
-                embed_info.append(f"Image: {embed.image.url}")
-            if embed.thumbnail and embed.thumbnail.url:
-                embed_info.append(f"Thumbnail: {embed.thumbnail.url}")
-            
-            if embed_info:
-                content_parts.append(f"Embed {i}: {' | '.join(embed_info)}")
-                log(f"[EXTRACT] Embed {i} info: {embed_info}")
+    # Process embeds with detailed debugging
+    log(f"[EXTRACT] Checking embeds: hasattr(message, 'embeds')={hasattr(message, 'embeds')}")
+    if hasattr(message, 'embeds'):
+        log(f"[EXTRACT] message.embeds type: {type(message.embeds)}")
+        log(f"[EXTRACT] message.embeds length: {len(message.embeds) if message.embeds else 0}")
+        log(f"[EXTRACT] message.embeds content: {message.embeds}")
+
+        if message.embeds:
+            log(f"[EXTRACT] Found {len(message.embeds)} embed(s)")
+            for i, embed in enumerate(message.embeds, 1):
+                log(f"[EXTRACT] Processing embed {i}: type={type(embed)}, dict={embed.__dict__ if hasattr(embed, '__dict__') else 'no __dict__'}")
+                embed_info = []
+
+                if embed.title:
+                    embed_info.append(f"Title: {embed.title}")
+                if embed.description:
+                    embed_info.append(f"Description: {embed.description}")
+                if embed.fields:
+                    for field in embed.fields:
+                        embed_info.append(f"{field.name}: {field.value}")
+                if embed.footer and embed.footer.text:
+                    embed_info.append(f"Footer: {embed.footer.text}")
+                if embed.author and embed.author.name:
+                    embed_info.append(f"Author: {embed.author.name}")
+                if embed.timestamp:
+                    embed_info.append(f"Timestamp: {embed.timestamp}")
+                if embed.url:
+                    embed_info.append(f"URL: {embed.url}")
+                if embed.image and embed.image.url:
+                    embed_info.append(f"Image: {embed.image.url}")
+                if embed.thumbnail and embed.thumbnail.url:
+                    embed_info.append(f"Thumbnail: {embed.thumbnail.url}")
+
+                if embed_info:
+                    content_parts.append(f"Embed {i}: {' | '.join(embed_info)}")
+                    log(f"[EXTRACT] Embed {i} info: {embed_info}")
+                else:
+                    log(f"[EXTRACT] Embed {i} has no extractable content")
+        else:
+            log("[EXTRACT] No embeds found")
     else:
-        log("[EXTRACT] No embeds found")
+        log("[EXTRACT] Message object has no embeds attribute")
 
     # Process attachments (images, files, etc.)
     if message.attachments:
