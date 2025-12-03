@@ -619,9 +619,11 @@ async def on_message(message):
                     referenced_content = await extract_bot_message_content(referenced_msg)
                     log(f"[BOT_REPLY] User {message.author.name} replied to bot {referenced_msg.author.name}'s message")
                 else:
-                    # Regular user message
+                    # Regular user message - clean bot mentions from it
                     referenced_content = referenced_msg.content
-                    log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message: '{referenced_msg.content[:50]}...'")
+                    # Remove bot mentions to avoid confusion
+                    referenced_content = re.sub(r'<@!?{}>'.format(bot.user.id), '', referenced_content).strip()
+                    log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message: '{referenced_content[:50]}...'")
         except discord.NotFound:
             log("[REPLY] Referenced message not found - might have been deleted")
         except discord.Forbidden:
