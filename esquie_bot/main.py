@@ -153,7 +153,8 @@ async def extract_bot_message_content(message: discord.Message) -> str:
     if hasattr(message, 'embeds'):
         log(f"[EXTRACT] message.embeds type: {type(message.embeds)}")
         log(f"[EXTRACT] message.embeds length: {len(message.embeds) if message.embeds else 0}")
-        log(f"[EXTRACT] message.embeds content: {message.embeds}")
+        log(f"[EXTRACT] message.embeds is truthy: {bool(message.embeds)}")
+        log(f"[EXTRACT] message.embeds repr: {repr(message.embeds)}")
 
         if message.embeds:
             log(f"[EXTRACT] Found {len(message.embeds)} embed(s)")
@@ -264,13 +265,16 @@ async def extract_bot_message_content(message: discord.Message) -> str:
         content_parts.append(f"Flags: {', '.join(flags_info)}")
         log(f"[EXTRACT] Message flags: {flags_info}")
 
-    # Check for interaction metadata (for slash command responses)
+    # Check message type and other properties
+    log(f"[EXTRACT] Message type: {message.type}")
+    log(f"[EXTRACT] Message flags: {message.flags if hasattr(message, 'flags') else 'No flags'}")
+    log(f"[EXTRACT] Message webhook_id: {message.webhook_id if hasattr(message, 'webhook_id') else 'No webhook'}")
+    log(f"[EXTRACT] Message application_id: {message.application_id if hasattr(message, 'application_id') else 'No application'}")
+
+    # Check for interaction metadata that might indicate slash command responses
     if hasattr(message, 'interaction') and message.interaction:
-        interaction_info = f"Interaction: {message.interaction.name}"
-        if hasattr(message.interaction, 'user'):
-            interaction_info += f" by {message.interaction.user}"
-        content_parts.append(interaction_info)
-        log(f"[EXTRACT] Interaction metadata: {interaction_info}")
+        log(f"[EXTRACT] Message has interaction: {message.interaction}")
+        content_parts.append(f"Response to slash command: {message.interaction.name if hasattr(message.interaction, 'name') else 'Unknown'}")
 
     # Check for application command data
     if hasattr(message, 'application') and message.application:
@@ -288,10 +292,27 @@ async def extract_bot_message_content(message: discord.Message) -> str:
     }
     log(f"[EXTRACT] Raw message data: {raw_data}")
 
-    # If no content at all, provide a generic description
+    # Check for any rich content that might indicate the message has visual elements
+    has_rich_content = bool(message.embeds or message.attachments or (hasattr(message, 'components') and message.components) or message.stickers)
+    log(f"[EXTRACT] Message has rich content: {has_rich_content}")
+
+    # If no traditional content but has rich content, try to get a summary
+    if not content_parts and has_rich_content:
+        log(f"[EXTRACT] Message has no text content but has rich content - attempting to summarize")
+        if message.attachments:
+            content_parts.append(f"Contains {len(message.attachments)} attachment(s)")
+        if hasattr(message, 'components') and message.components:
+            content_parts.append(f"Contains interactive components")
+        if message.stickers:
+            content_parts.append(f"Contains {len(message.stickers)} sticker(s)")
+
+    # If still no content, check if this might be a system message or special format
     if not content_parts:
-        log(f"[EXTRACT] No content found in bot message from {message.author.name}")
-        return f"Bot message from {message.author.name} (no visible content)"
+        if message.type != discord.MessageType.default:
+            content_parts.append(f"System message type: {message.type}")
+            log(f"[EXTRACT] Detected system message type: {message.type}")
+        else:
+            log(f"[EXTRACT] Message appears to be truly empty or uses unsupported format")
 
     result = " | ".join(content_parts)
     log(f"[EXTRACT] Final extracted content: '{result[:200]}...'")
