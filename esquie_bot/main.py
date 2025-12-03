@@ -610,19 +610,18 @@ async def on_message(message):
                 log(f"[REPLY] User {message.author.name} replied to bot message: '{referenced_msg.content[:50]}...'")
                 conversation_history = await build_conversation_history(message)
             else:
-                # If mentioning bot in reply to another user's/bot's message, include that message for context
-                if is_mention:
-                    # Check if the referenced message is from a bot
-                    is_referenced_bot = referenced_msg.author.bot
-                    
-                    if is_referenced_bot:
-                        # Extract comprehensive content from bot message
-                        referenced_content = await extract_bot_message_content(referenced_msg)
-                        log(f"[BOT_REPLY] User {message.author.name} replied to bot {referenced_msg.author.name}'s message with bot mention")
-                    else:
-                        # Regular user message
-                        referenced_content = referenced_msg.content
-                        log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message with bot mention: '{referenced_msg.content[:50]}...'")
+                # Extract content from referenced message for context (works with or without mention)
+                # Check if the referenced message is from a bot
+                is_referenced_bot = referenced_msg.author.bot
+                
+                if is_referenced_bot:
+                    # Extract comprehensive content from bot message
+                    referenced_content = await extract_bot_message_content(referenced_msg)
+                    log(f"[BOT_REPLY] User {message.author.name} replied to bot {referenced_msg.author.name}'s message")
+                else:
+                    # Regular user message
+                    referenced_content = referenced_msg.content
+                    log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message: '{referenced_msg.content[:50]}...'")
         except discord.NotFound:
             log("[REPLY] Referenced message not found - might have been deleted")
         except discord.Forbidden:
