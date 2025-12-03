@@ -204,6 +204,8 @@ User: [reacts with ❌ to bot's message]
 The bot uses environment variables for configuration:
 
 - `DISCORD_BOT_TOKEN`: Your Discord bot token (required)
+- `BOT_NAME`: The name the bot will use in its AI responses (default: "Esquie")
+- `BOT_STATUS`: The status message shown in Discord (default: "Losing A Rock Is Better Than Never Having A Rock!")
 
 ## AI Integration
 
