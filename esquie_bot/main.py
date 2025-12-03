@@ -128,15 +128,21 @@ async def process_image_attachment(attachment: discord.Attachment) -> Optional[s
 
 
 async def extract_bot_message_content(message: discord.Message) -> str:
-    """Extract comprehensive content from a bot message including embeds and attachments."""
+    """Extract comprehensive content from a bot message including embeds, attachments, components, and other rich content."""
     content_parts = []
-    
+    log(f"[EXTRACT] Analyzing bot message from {message.author.name} (ID: {message.id})")
+    log(f"[EXTRACT] Message type: {message.type}, Channel: {message.channel}, Created: {message.created_at}")
+
     # Add the main message content if it exists
     if message.content:
         content_parts.append(f"Message: {message.content}")
-    
+        log(f"[EXTRACT] Found message content: '{message.content[:100]}...'")
+    else:
+        log("[EXTRACT] No message content found")
+
     # Process embeds (common in bot messages)
     if message.embeds:
+        log(f"[EXTRACT] Found {len(message.embeds)} embed(s)")
         for i, embed in enumerate(message.embeds, 1):
             embed_info = []
             
@@ -149,25 +155,120 @@ async def extract_bot_message_content(message: discord.Message) -> str:
                     embed_info.append(f"{field.name}: {field.value}")
             if embed.footer and embed.footer.text:
                 embed_info.append(f"Footer: {embed.footer.text}")
+            if embed.author and embed.author.name:
+                embed_info.append(f"Author: {embed.author.name}")
+            if embed.timestamp:
+                embed_info.append(f"Timestamp: {embed.timestamp}")
+            if embed.url:
+                embed_info.append(f"URL: {embed.url}")
+            if embed.image and embed.image.url:
+                embed_info.append(f"Image: {embed.image.url}")
+            if embed.thumbnail and embed.thumbnail.url:
+                embed_info.append(f"Thumbnail: {embed.thumbnail.url}")
             
             if embed_info:
                 content_parts.append(f"Embed {i}: {' | '.join(embed_info)}")
-    
+                log(f"[EXTRACT] Embed {i} info: {embed_info}")
+    else:
+        log("[EXTRACT] No embeds found")
+
     # Process attachments (images, files, etc.)
     if message.attachments:
+        log(f"[EXTRACT] Found {len(message.attachments)} attachment(s)")
         for i, attachment in enumerate(message.attachments, 1):
             if attachment.content_type and attachment.content_type.startswith('image/'):
                 content_parts.append(f"Attachment {i}: Image file ({attachment.filename})")
             else:
                 content_parts.append(f"Attachment {i}: {attachment.filename}")
-    
+    else:
+        log("[EXTRACT] No attachments found")
+
+    # Process components (buttons, select menus, etc.)
+    if hasattr(message, 'components') and message.components:
+        log(f"[EXTRACT] Found {len(message.components)} component row(s)")
+        for i, component_row in enumerate(message.components, 1):
+            if hasattr(component_row, 'children'):
+                component_info = []
+                for component in component_row.children:
+                    if hasattr(component, 'label') and component.label:
+                        component_info.append(f"Button: {component.label}")
+                    elif hasattr(component, 'placeholder') and component.placeholder:
+                        component_info.append(f"Select Menu: {component.placeholder}")
+                    elif hasattr(component, 'options') and component.options:
+                        options_text = [opt.get('label', opt.get('value', 'Unknown')) for opt in component.options]
+                        component_info.append(f"Select Options: {', '.join(options_text)}")
+                    elif hasattr(component, 'type'):
+                        component_info.append(f"Component type {component.type}")
+                    else:
+                        component_info.append(f"Unknown component: {component}")
+                if component_info:
+                    content_parts.append(f"Components Row {i}: {' | '.join(component_info)}")
+                    log(f"[EXTRACT] Component row {i}: {component_info}")
+    else:
+        log("[EXTRACT] No components found")
+
+    # Process stickers
+    if hasattr(message, 'stickers') and message.stickers:
+        sticker_names = [sticker.name for sticker in message.stickers]
+        content_parts.append(f"Stickers: {', '.join(sticker_names)}")
+        log(f"[EXTRACT] Found stickers: {sticker_names}")
+
+    # Process reactions if any (though usually not on bot messages)
+    if message.reactions:
+        reaction_info = []
+        for reaction in message.reactions:
+            if hasattr(reaction.emoji, 'name'):
+                reaction_info.append(f"{reaction.emoji.name} ({reaction.count})")
+            else:
+                reaction_info.append(f"{reaction.emoji} ({reaction.count})")
+        content_parts.append(f"Reactions: {', '.join(reaction_info)}")
+        log(f"[EXTRACT] Found reactions: {reaction_info}")
+
+    # Check for special message flags
+    flags_info = []
+    if hasattr(message, 'flags'):
+        if message.flags.ephemeral:
+            flags_info.append("ephemeral")
+        if message.flags.loading:
+            flags_info.append("loading")
+        if message.flags.suppress_notifications:
+            flags_info.append("suppress_notifications")
+    if flags_info:
+        content_parts.append(f"Flags: {', '.join(flags_info)}")
+        log(f"[EXTRACT] Message flags: {flags_info}")
+
+    # Check for interaction metadata (for slash command responses)
+    if hasattr(message, 'interaction') and message.interaction:
+        interaction_info = f"Interaction: {message.interaction.name}"
+        if hasattr(message.interaction, 'user'):
+            interaction_info += f" by {message.interaction.user}"
+        content_parts.append(interaction_info)
+        log(f"[EXTRACT] Interaction metadata: {interaction_info}")
+
+    # Check for application command data
+    if hasattr(message, 'application') and message.application:
+        content_parts.append(f"Application: {message.application.name}")
+        log(f"[EXTRACT] Application: {message.application.name}")
+
+    # Add raw message data for debugging
+    raw_data = {
+        'content_length': len(message.content) if message.content else 0,
+        'embeds_count': len(message.embeds),
+        'attachments_count': len(message.attachments),
+        'components_count': len(message.components) if hasattr(message, 'components') else 0,
+        'reactions_count': len(message.reactions),
+        'stickers_count': len(message.stickers) if hasattr(message, 'stickers') else 0,
+    }
+    log(f"[EXTRACT] Raw message data: {raw_data}")
+
     # If no content at all, provide a generic description
     if not content_parts:
+        log(f"[EXTRACT] No content found in bot message from {message.author.name}")
         return f"Bot message from {message.author.name} (no visible content)"
-    
-    return " | ".join(content_parts)
 
-
+    result = " | ".join(content_parts)
+    log(f"[EXTRACT] Final extracted content: '{result[:200]}...'")
+    return result
 async def get_image_descriptions(message: discord.Message) -> List[str]:
     """Extract and describe all images in a message."""
     descriptions = []
@@ -450,6 +551,7 @@ async def on_message(message):
     is_reply_to_bot = False
     conversation_history = []
     referenced_content = ""
+    referenced_msg = None  # Initialize to None
     
     # Check if this is a reply to one of our messages
     if message.reference and message.reference.message_id:
@@ -480,9 +582,12 @@ async def on_message(message):
         except Exception as e:
             log(f"[REPLY] Error fetching referenced message: {e}")
 
-    # Only respond to mentions or replies to bot messages that contain new images
+    # Only respond to mentions or replies to bot messages that contain new images or explanation requests
     has_new_images = bool(message.attachments or message.embeds)
-    should_respond = is_mention or (is_reply_to_bot and has_new_images)
+    is_reply_to_other_bot = bool(referenced_msg and referenced_msg.author.bot and referenced_msg.author != bot.user)
+    is_explanation_request = detect_explanation_request(message.content)
+
+    should_respond = is_mention or (is_reply_to_bot and has_new_images) or (is_reply_to_other_bot and is_explanation_request)
     
     if not should_respond:
         log(f"[SKIP] Ignoring reply without mention or new images from {message.author.name}")
@@ -533,10 +638,14 @@ async def on_message(message):
     
     # Include referenced message content if replying to another user's message with bot mention
     reference_context = ""
-    if referenced_content:
+    if referenced_content and referenced_msg:
         # Use enhanced context building for better bot message handling
         reference_context = await build_enhanced_reference_context(message, referenced_msg, referenced_content)
         log(f"[CONTEXT] Including referenced message: '{referenced_content[:50]}...'")
+    elif referenced_content:
+        # Fallback if referenced_msg is not available
+        reference_context = f" [Replying to: {referenced_content}]"
+        log(f"[CONTEXT] Using fallback context: '{referenced_content[:50]}...'")
     
     personalized_content = f"[{user_display_name}]: {content}{mention_context}{reference_context}"
 
