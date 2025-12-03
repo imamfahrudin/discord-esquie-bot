@@ -621,10 +621,13 @@ async def on_message(message):
                 else:
                     # Regular user message - clean bot mentions from it
                     original_content = referenced_msg.content
+                    log(f"[DEBUG] Original content: '{original_content}', length: {len(original_content)}")
                     # Remove bot mentions to avoid confusion in AI context
                     cleaned_content = re.sub(r'<@!?{}>'.format(bot.user.id), '', original_content).strip()
+                    log(f"[DEBUG] Cleaned content: '{cleaned_content}', length: {len(cleaned_content)}")
                     # Use cleaned content, but fall back to original if it becomes empty
                     referenced_content = cleaned_content if cleaned_content else original_content
+                    log(f"[DEBUG] Final referenced_content: '{referenced_content}', length: {len(referenced_content)}, bool: {bool(referenced_content)}")
                     # Log the content
                     if cleaned_content:
                         log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message: '{referenced_content[:50]}...'")
