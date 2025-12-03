@@ -623,7 +623,11 @@ async def on_message(message):
                     referenced_content = referenced_msg.content
                     # Remove bot mentions to avoid confusion
                     referenced_content = re.sub(r'<@!?{}>'.format(bot.user.id), '', referenced_content).strip()
-                    log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message: '{referenced_content[:50]}...'")
+                    # Log the cleaned content
+                    if referenced_content:
+                        log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message: '{referenced_content[:50]}...'")
+                    else:
+                        log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message (empty after cleaning)")
         except discord.NotFound:
             log("[REPLY] Referenced message not found - might have been deleted")
         except discord.Forbidden:
@@ -689,6 +693,7 @@ async def on_message(message):
     
     # Include referenced message content if replying to another user's message with bot mention
     reference_context = ""
+    log(f"[DEBUG] referenced_content exists: {bool(referenced_content)}, referenced_msg exists: {bool(referenced_msg)}")
     if referenced_content and referenced_msg:
         # Use enhanced context building for better bot message handling
         reference_context = await build_enhanced_reference_context(message, referenced_msg, referenced_content)
@@ -697,6 +702,8 @@ async def on_message(message):
         # Fallback if referenced_msg is not available
         reference_context = f" [Replying to: {referenced_content}]"
         log(f"[CONTEXT] Using fallback context: '{referenced_content[:50]}...'")
+    else:
+        log(f"[DEBUG] No referenced content to include in context")
     
     personalized_content = f"[{user_display_name}]: {content}{mention_context}{reference_context}"
 
