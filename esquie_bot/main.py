@@ -629,11 +629,12 @@ async def on_message(message):
         except Exception as e:
             log(f"[REPLY] Error fetching referenced message: {e}")
 
-    # Only respond to mentions, replies to bot messages with new images, replies to other bots with explanation requests, or replies to users with explanation requests
+    # Only respond to mentions, replies to bot messages with new images, replies to other bots with explanation requests, or replies to any user (including self) with explanation requests
     has_new_images = bool(message.attachments or message.embeds)
     is_reply_to_other_bot = bool(referenced_msg and referenced_msg.author.bot and referenced_msg.author != bot.user)
     is_explanation_request = detect_explanation_request(message.content)
-    is_reply_to_user_with_explanation = bool(referenced_msg and not referenced_msg.author.bot and is_explanation_request)
+    # Allow explanation requests for any user message (including self-replies)
+    is_reply_to_user_with_explanation = bool(referenced_msg and not referenced_msg.author.bot and is_explanation_request and is_mention)
 
     should_respond = is_mention or (is_reply_to_bot and has_new_images) or (is_reply_to_other_bot and is_explanation_request) or is_reply_to_user_with_explanation
     
