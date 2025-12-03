@@ -621,6 +621,11 @@ async def on_message(message):
                 else:
                     # Regular user message - clean bot mentions from it
                     original_content = referenced_msg.content
+                    log(f"[DEBUG] Referenced message ID: {referenced_msg.id}")
+                    log(f"[DEBUG] Referenced message type: {referenced_msg.type}")
+                    log(f"[DEBUG] Referenced message author: {referenced_msg.author.name}")
+                    log(f"[DEBUG] Referenced message has embeds: {bool(referenced_msg.embeds)}")
+                    log(f"[DEBUG] Referenced message has attachments: {bool(referenced_msg.attachments)}")
                     log(f"[DEBUG] Original content: '{original_content}', length: {len(original_content)}")
                     # Remove bot mentions to avoid confusion in AI context
                     cleaned_content = re.sub(r'<@!?{}>'.format(bot.user.id), '', original_content).strip()
