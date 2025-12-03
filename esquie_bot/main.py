@@ -286,9 +286,33 @@ async def on_reaction_add(reaction, user):
     if reaction.message.author != bot.user:
         return
     
-    # Check if the bot message is replying to the reacting user
+    # Check if this is an AI-generated image embed
+    is_image_embed = False
+    if reaction.message.embeds:
+        for embed in reaction.message.embeds:
+            if embed.title and "🎨 AI Generated Image" in embed.title:
+                is_image_embed = True
+                break
+    
+    # For image embeds, allow deletion by any user who reacts with X
+    if is_image_embed:
+        try:
+            await reaction.message.delete()
+            log(f"[DELETE] Deleted AI-generated image embed due to X reaction from {user.name}")
+            return
+        except discord.Forbidden:
+            log(f"[DELETE] Cannot delete image embed - missing permissions for user {user.name}")
+            return
+        except discord.NotFound:
+            log("[DELETE] Image embed message already deleted")
+            return
+        except Exception as e:
+            log(f"[DELETE] Error deleting image embed: {e}")
+            return
+    
+    # For regular bot messages, check if the bot message is replying to the reacting user
     if not reaction.message.reference or not reaction.message.reference.message_id:
-        log(f"[DELETE] Bot message is not a reply, ignoring X reaction from {user.name}")
+        log(f"[DELETE] Bot message is not a reply and not an image embed, ignoring X reaction from {user.name}")
         return
     
     try:
