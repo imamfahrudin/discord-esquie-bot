@@ -620,14 +620,16 @@ async def on_message(message):
                     log(f"[BOT_REPLY] User {message.author.name} replied to bot {referenced_msg.author.name}'s message")
                 else:
                     # Regular user message - clean bot mentions from it
-                    referenced_content = referenced_msg.content
-                    # Remove bot mentions to avoid confusion
-                    referenced_content = re.sub(r'<@!?{}>'.format(bot.user.id), '', referenced_content).strip()
-                    # Log the cleaned content
-                    if referenced_content:
+                    original_content = referenced_msg.content
+                    # Remove bot mentions to avoid confusion in AI context
+                    cleaned_content = re.sub(r'<@!?{}>'.format(bot.user.id), '', original_content).strip()
+                    # Use cleaned content, but fall back to original if it becomes empty
+                    referenced_content = cleaned_content if cleaned_content else original_content
+                    # Log the content
+                    if cleaned_content:
                         log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message: '{referenced_content[:50]}...'")
                     else:
-                        log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message (empty after cleaning)")
+                        log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message (was only bot mention): '{referenced_content[:50]}...'")
         except discord.NotFound:
             log("[REPLY] Referenced message not found - might have been deleted")
         except discord.Forbidden:
