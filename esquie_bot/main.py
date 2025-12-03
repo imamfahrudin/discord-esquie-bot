@@ -127,6 +127,47 @@ async def process_image_attachment(attachment: discord.Attachment) -> Optional[s
         return f"[Image: {attachment.filename}] (Could not analyze this image)"
 
 
+async def extract_bot_message_content(message: discord.Message) -> str:
+    """Extract comprehensive content from a bot message including embeds and attachments."""
+    content_parts = []
+    
+    # Add the main message content if it exists
+    if message.content:
+        content_parts.append(f"Message: {message.content}")
+    
+    # Process embeds (common in bot messages)
+    if message.embeds:
+        for i, embed in enumerate(message.embeds, 1):
+            embed_info = []
+            
+            if embed.title:
+                embed_info.append(f"Title: {embed.title}")
+            if embed.description:
+                embed_info.append(f"Description: {embed.description}")
+            if embed.fields:
+                for field in embed.fields:
+                    embed_info.append(f"{field.name}: {field.value}")
+            if embed.footer and embed.footer.text:
+                embed_info.append(f"Footer: {embed.footer.text}")
+            
+            if embed_info:
+                content_parts.append(f"Embed {i}: {' | '.join(embed_info)}")
+    
+    # Process attachments (images, files, etc.)
+    if message.attachments:
+        for i, attachment in enumerate(message.attachments, 1):
+            if attachment.content_type and attachment.content_type.startswith('image/'):
+                content_parts.append(f"Attachment {i}: Image file ({attachment.filename})")
+            else:
+                content_parts.append(f"Attachment {i}: {attachment.filename}")
+    
+    # If no content at all, provide a generic description
+    if not content_parts:
+        return f"Bot message from {message.author.name} (no visible content)"
+    
+    return " | ".join(content_parts)
+
+
 async def get_image_descriptions(message: discord.Message) -> List[str]:
     """Extract and describe all images in a message."""
     descriptions = []
@@ -263,6 +304,43 @@ async def build_conversation_history(message: discord.Message, max_depth: int = 
     return history
 
 
+def detect_explanation_request(content: str) -> bool:
+    """Detect if the user is asking for an explanation of something."""
+    explanation_keywords = [
+        'explain', 'what is', 'what\'s', 'what are', 'what does', 'what do',
+        'tell me about', 'describe', 'meaning of', 'what does this mean',
+        'can you explain', 'please explain', 'explain this', 'explain that',
+        'what is it', 'what\'s this', 'what\'s that', 'what is this', 'what is that'
+    ]
+    
+    content_lower = content.lower().strip()
+    return any(keyword in content_lower for keyword in explanation_keywords)
+
+
+async def build_enhanced_reference_context(message: discord.Message, referenced_msg: discord.Message, referenced_content: str) -> str:
+    """Build enhanced context for referenced messages, especially for explanation requests."""
+    if not referenced_content:
+        return ""
+    
+    # Check if this looks like an explanation request
+    is_explanation_request = detect_explanation_request(message.content)
+    
+    if is_explanation_request and referenced_msg.author.bot:
+        # For explanation requests to other bots, provide more detailed context
+        context = f" [Please explain this bot message from {referenced_msg.author.name}: {referenced_content}]"
+        log(f"[EXPLANATION] Detected explanation request for bot message: '{referenced_content[:50]}...'")
+    elif referenced_msg.author.bot:
+        # Regular reference to bot message
+        context = f" [Referring to bot {referenced_msg.author.name}'s message: {referenced_content}]"
+        log(f"[BOT_CONTEXT] Including bot message context: '{referenced_content[:50]}...'")
+    else:
+        # Regular user message reference
+        context = f" [Replying to: {referenced_content}]"
+        log(f"[USER_CONTEXT] Including user message context: '{referenced_content[:50]}...'")
+    
+    return context
+
+
 @bot.event
 async def on_ready():
     """Called when the bot is ready and connected to Discord."""
@@ -382,10 +460,19 @@ async def on_message(message):
                 log(f"[REPLY] User {message.author.name} replied to bot message: '{referenced_msg.content[:50]}...'")
                 conversation_history = await build_conversation_history(message)
             else:
-                # If mentioning bot in reply to another user's message, include that message for context
+                # If mentioning bot in reply to another user's/bot's message, include that message for context
                 if is_mention:
-                    referenced_content = referenced_msg.content
-                    log(f"[REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message with bot mention: '{referenced_msg.content[:50]}...'")
+                    # Check if the referenced message is from a bot
+                    is_referenced_bot = referenced_msg.author.bot
+                    
+                    if is_referenced_bot:
+                        # Extract comprehensive content from bot message
+                        referenced_content = await extract_bot_message_content(referenced_msg)
+                        log(f"[BOT_REPLY] User {message.author.name} replied to bot {referenced_msg.author.name}'s message with bot mention")
+                    else:
+                        # Regular user message
+                        referenced_content = referenced_msg.content
+                        log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message with bot mention: '{referenced_msg.content[:50]}...'")
         except discord.NotFound:
             log("[REPLY] Referenced message not found - might have been deleted")
         except discord.Forbidden:
@@ -447,7 +534,8 @@ async def on_message(message):
     # Include referenced message content if replying to another user's message with bot mention
     reference_context = ""
     if referenced_content:
-        reference_context = f" [Replying to: {referenced_content}]"
+        # Use enhanced context building for better bot message handling
+        reference_context = await build_enhanced_reference_context(message, referenced_msg, referenced_content)
         log(f"[CONTEXT] Including referenced message: '{referenced_content[:50]}...'")
     
     personalized_content = f"[{user_display_name}]: {content}{mention_context}{reference_context}"
