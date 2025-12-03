@@ -25,7 +25,7 @@ An AI-powered Discord bot built with Python and discord.py that provides intelli
 ## Prerequisites
 
 - Docker and Docker Compose installed
-- A Discord bot token (from Discord Developer Portal)
+- One or more Discord bot tokens (from Discord Developer Portal)
 - Git (for cloning the repository)
 
 ## Installation
@@ -37,7 +37,9 @@ git clone https://github.com/imamfahrudin/discord-esquie-bot.git
 cd discord-esquie-bot
 ```
 
-### 2. Create a Discord Bot
+### 2. Create Discord Bots
+
+For each bot instance you want to run:
 
 1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
 2. Click "New Application" and give it a name
@@ -47,22 +49,39 @@ cd discord-esquie-bot
 
 ### 3. Configure Environment
 
-Create a `.env` file in the project root and add your bot token:
+Create environment files for each bot instance. The project supports multiple independent bots:
 
 ```bash
-cp .env.example .env
-# Edit .env and replace 'your_bot_token_here' with your actual bot token
+# Copy the example file for your first bot
+cp .env.example .env1
+
+# Edit .env1 and replace 'your_bot_token_here' with your actual bot token
 ```
 
-Or manually create the `.env` file:
+For additional bots, create more env files:
+
+```bash
+cp .env1 .env2  # Copy settings from first bot
+# Edit .env2 with a different bot token and customize other settings if needed
+```
+
+Or manually create the `.env` files:
 
 ```env
-DISCORD_BOT_TOKEN=your_actual_bot_token_here
+# .env1
+DISCORD_BOT_TOKEN=your_first_bot_token_here
+BOT_NAME=Esquie-1
+BOT_STATUS=First bot instance!
+
+# .env2
+DISCORD_BOT_TOKEN=your_second_bot_token_here
+BOT_NAME=Esquie-2
+BOT_STATUS=Second bot instance!
 ```
 
 ### 4. Set Bot Permissions
 
-In the Discord Developer Portal, ensure your bot has these permissions:
+In the Discord Developer Portal, ensure each bot has these permissions:
 - Send Messages
 - Read Message History
 - Add Reactions
@@ -74,18 +93,55 @@ In the Discord Developer Portal, ensure your bot has these permissions:
 
 ### Using Docker Compose (Recommended)
 
+The project supports running multiple independent bot instances. Each instance uses its own environment file and runs in a separate container.
+
 ```bash
-# Build and start the bot
+# Build and start all active bot instances
 docker-compose up -d
 
-# View logs
+# Start a specific bot instance
+docker-compose up -d discord-bot-1
+
+# Start multiple specific instances
+docker-compose up -d discord-bot-1 discord-bot-2
+
+# View logs for all bots
 docker-compose logs -f
 
-# Stop the bot
+# View logs for a specific bot
+docker-compose logs -f discord-bot-1
+
+# Stop all bots
 docker-compose down
+
+# Stop a specific bot
+docker-compose down discord-bot-1
 ```
 
+### Adding More Bot Instances
+
+1. Create a new environment file (e.g., `.env3`)
+2. Add a new service block in `docker-compose.yml`:
+
+```yaml
+discord-bot-3:
+  build: .
+  container_name: discord-esquie-bot-3
+  env_file:
+    - .env3
+  restart: unless-stopped
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+```
+
+3. Start the new instance: `docker-compose up -d discord-bot-3`
+
 ### Local Development
+
+For development with a single instance:
 
 ```bash
 # Install dependencies
@@ -98,9 +154,20 @@ python bot.py
 python -c "from esquie_bot import run; run()"
 ```
 
+For multiple local instances, run them in separate terminals with different environment variables.
+
 ## Usage
 
 The bot listens for messages that mention it (@YourBotName) or replies to its messages. When triggered, it processes the message content and responds with AI-generated replies that maintain conversation context.
+
+### Multiple Bot Instances
+
+You can run multiple bot instances simultaneously, each with different personalities or serving different servers:
+
+- Each bot instance has its own Discord token and can be invited to different servers
+- Bots can have different names and status messages for easy identification
+- All instances share the same codebase but run in separate containers
+- Use different bot names (e.g., "Esquie-1", "Esquie-2") to distinguish them in conversations
 
 ### Examples
 
@@ -201,11 +268,58 @@ User: [reacts with ❌ to bot's message]
 
 ## Configuration
 
-The bot uses environment variables for configuration:
+The bot uses environment variables for configuration. You can create multiple `.env` files for different bot instances (`.env1`, `.env2`, etc.).
 
-- `DISCORD_BOT_TOKEN`: Your Discord bot token (required)
+### Environment Variables
+
+- `DISCORD_BOT_TOKEN`: Your Discord bot token (required) - Must be unique for each bot instance
 - `BOT_NAME`: The name the bot will use in its AI responses (default: "Esquie")
 - `BOT_STATUS`: The status message shown in Discord (default: "Losing A Rock Is Better Than Never Having A Rock!")
+
+### Example Configuration Files
+
+```env
+# .env1 - First bot instance
+DISCORD_BOT_TOKEN=your_first_bot_token_here
+BOT_NAME=Esquie-1
+BOT_STATUS=First bot instance!
+
+# .env2 - Second bot instance
+DISCORD_BOT_TOKEN=your_second_bot_token_here
+BOT_NAME=Esquie-2
+BOT_STATUS=Second bot instance!
+```
+
+### Docker Compose Service Configuration
+
+Each bot instance is defined as a separate service in `docker-compose.yml`:
+
+```yaml
+services:
+  discord-bot-1:
+    build: .
+    container_name: discord-esquie-bot-1
+    env_file:
+      - .env1
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # discord-bot-2:  # Uncomment to enable second bot
+  #   build: .
+  #   container_name: discord-esquie-bot-2
+  #   env_file:
+  #     - .env2
+  #   restart: unless-stopped
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "3"
+```
 
 ## AI Integration
 
@@ -225,6 +339,7 @@ The bot integrates with [Pollinations.AI](https://pollinations.ai), a free AI pl
 - **Package Structure**: Main logic lives in `esquie_bot/main.py`; `bot.py` is a thin entrypoint that calls `esquie_bot.run()` for backward compatibility
 - **Event-Driven**: Uses discord.py's event system for message processing and reactions
 - **AI Integration**: RESTful API calls to Pollinations.AI with conversation history
+- **Multi-Bot Support**: Docker Compose configuration supports multiple independent bot instances, each with its own environment file and container
 - **Docker Optimized**: Logging with immediate flush for container visibility
 - **Error Resilient**: Multiple fallback strategies (edit → reply → channel send) for message delivery
 - **Async Processing**: Non-blocking HTTP requests using thread pools
@@ -239,11 +354,12 @@ The bot integrates with [Pollinations.AI](https://pollinations.ai), a free AI pl
 
 ### Bot doesn't respond to mentions
 - Make sure the bot has been invited to your server with proper permissions
-- Check that the bot token in `.env` is correct
+- Check that the bot token in your `.env` file is correct
 - Verify the bot is online: `docker-compose ps`
+- For multiple bots, ensure you're mentioning the correct bot instance
 
 ### AI responses not working
-- Check API connectivity: `docker-compose logs discord-bot`
+- Check API connectivity: `docker-compose logs discord-bot-1` (replace with your service name)
 - Verify Pollinations.AI service is available
 - Look for API error messages in logs
 
@@ -263,10 +379,20 @@ If you see `PrivilegedIntentsRequired` error:
 - Only the original user who triggered the response can delete it
 - The bot message must be a reply to the user's message
 
+### Multiple Bot Issues
+- Each bot instance needs a unique Discord token
+- Make sure container names don't conflict (check `docker-compose ps`)
+- Use different bot names/statuses to distinguish instances
+- Check logs for each service individually: `docker-compose logs -f discord-bot-1`
+
 ### Logs
 Check the logs for any errors:
 ```bash
-docker-compose logs discord-bot
+# All bots
+docker-compose logs
+
+# Specific bot instance
+docker-compose logs discord-bot-1
 ```
 
 The bot provides detailed logging including:
