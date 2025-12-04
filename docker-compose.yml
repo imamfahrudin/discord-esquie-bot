@@ -4,7 +4,7 @@ services:
     container_name: discord-esquie-bot-1
     env_file:
       - .env1
-    restart: unless-stopped
+    restart: on-failure:5  # Only restart on failure, max 5 times
     logging:
       driver: "json-file"
       options:
@@ -16,7 +16,7 @@ services:
   #   container_name: discord-esquie-bot-2
   #   env_file:
   #     - .env2
-  #   restart: unless-stopped
+  #   restart: on-failure:5  # Only restart on failure, max 5 times
   #   logging:
   #     driver: "json-file"
   #     options:

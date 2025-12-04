@@ -494,312 +494,332 @@ async def build_enhanced_reference_context(message: discord.Message, referenced_
 @bot.event
 async def on_ready():
     """Called when the bot is ready and connected to Discord."""
-    log(f"[STARTUP] Bot is ready! Logged in as {bot.user}")
-    log(f"[STARTUP] Bot ID: {bot.user.id}")
-    log(f"[STARTUP] Connected to {len(bot.guilds)} servers")
-    
-    # Sync slash commands
     try:
-        synced = await tree.sync()
-        log(f"[STARTUP] Synced {len(synced)} slash commands")
+        log(f"[STARTUP] Bot is ready! Logged in as {bot.user}")
+        log(f"[STARTUP] Bot ID: {bot.user.id}")
+        log(f"[STARTUP] Connected to {len(bot.guilds)} servers")
+        
+        # Sync slash commands
+        try:
+            synced = await tree.sync()
+            log(f"[STARTUP] Synced {len(synced)} slash commands")
+        except Exception as e:
+            log(f"[STARTUP] Failed to sync slash commands: {e}")
+        
+        # Set bot status
+        await bot.change_presence(activity=discord.Game(name=BOT_STATUS))
+        log("[STARTUP] Bot status updated")
     except Exception as e:
-        log(f"[STARTUP] Failed to sync slash commands: {e}")
-    
-    # Set bot status
-    await bot.change_presence(activity=discord.Game(name=BOT_STATUS))
-    log("[STARTUP] Bot status updated")
+        log(f"[STARTUP ERROR] Critical error in on_ready: {e}")
+        import traceback
+        log(f"[STARTUP ERROR] Traceback: {traceback.format_exc()}")
 
 
 @bot.event
 async def on_reaction_add(reaction, user):
     """Called when a reaction is added to a message."""
-    # Ignore bot's own reactions
-    if user == bot.user:
-        return
-    
-    # Check if reaction is X mark (❌ or :x:)
-    if str(reaction.emoji) not in ['❌', '✖️', '❎', 'x', 'X']:
-        return
-    
-    # Check if the message is from the bot
-    if reaction.message.author != bot.user:
-        return
-    
-    # Check if this is an AI-generated image embed
-    is_image_embed = False
-    if reaction.message.embeds:
-        for embed in reaction.message.embeds:
-            if embed.title and "🎨 AI Generated Image" in embed.title:
-                is_image_embed = True
-                break
-    
-    # For image embeds, allow deletion by any user who reacts with X
-    if is_image_embed:
+    try:
+        # Ignore bot's own reactions
+        if user == bot.user:
+            return
+        
+        # Check if reaction is X mark (❌ or :x:)
+        if str(reaction.emoji) not in ['❌', '✖️', '❎', 'x', 'X']:
+            return
+        
+        # Check if the message is from the bot
+        if reaction.message.author != bot.user:
+            return
+        
+        # Check if this is an AI-generated image embed
+        is_image_embed = False
+        if reaction.message.embeds:
+            for embed in reaction.message.embeds:
+                if embed.title and "🎨 AI Generated Image" in embed.title:
+                    is_image_embed = True
+                    break
+        
+        # For image embeds, allow deletion by any user who reacts with X
+        if is_image_embed:
+            try:
+                await reaction.message.delete()
+                log(f"[DELETE] Deleted AI-generated image embed due to X reaction from {user.name}")
+                return
+            except discord.Forbidden:
+                log(f"[DELETE] Cannot delete image embed - missing permissions for user {user.name}")
+                return
+            except discord.NotFound:
+                log("[DELETE] Image embed message already deleted")
+                return
+            except Exception as e:
+                log(f"[DELETE] Error deleting image embed: {e}")
+                return
+        
+        # For regular bot messages, check if the bot message is replying to the reacting user
+        if not reaction.message.reference or not reaction.message.reference.message_id:
+            log(f"[DELETE] Bot message is not a reply and not an image embed, ignoring X reaction from {user.name}")
+            return
+        
         try:
-            await reaction.message.delete()
-            log(f"[DELETE] Deleted AI-generated image embed due to X reaction from {user.name}")
+            # Get the original message that the bot replied to
+            original_message = await reaction.message.channel.fetch_message(reaction.message.reference.message_id)
+            
+            # Only allow the original user to delete their bot response
+            if original_message.author != user:
+                log(f"[DELETE] User {user.name} tried to delete bot message but is not the original requester")
+                return
+                
+        except discord.NotFound:
+            log("[DELETE] Referenced original message not found")
             return
         except discord.Forbidden:
-            log(f"[DELETE] Cannot delete image embed - missing permissions for user {user.name}")
-            return
-        except discord.NotFound:
-            log("[DELETE] Image embed message already deleted")
+            log("[DELETE] Cannot access referenced message - permission issue")
             return
         except Exception as e:
-            log(f"[DELETE] Error deleting image embed: {e}")
+            log(f"[DELETE] Error checking original message: {e}")
             return
-    
-    # For regular bot messages, check if the bot message is replying to the reacting user
-    if not reaction.message.reference or not reaction.message.reference.message_id:
-        log(f"[DELETE] Bot message is not a reply and not an image embed, ignoring X reaction from {user.name}")
-        return
-    
-    try:
-        # Get the original message that the bot replied to
-        original_message = await reaction.message.channel.fetch_message(reaction.message.reference.message_id)
         
-        # Only allow the original user to delete their bot response
-        if original_message.author != user:
-            log(f"[DELETE] User {user.name} tried to delete bot message but is not the original requester")
-            return
-            
-    except discord.NotFound:
-        log("[DELETE] Referenced original message not found")
-        return
-    except discord.Forbidden:
-        log("[DELETE] Cannot access referenced message - permission issue")
-        return
+        try:
+            await reaction.message.delete()
+            log(f"[DELETE] Deleted bot message due to X reaction from original user {user.name}")
+        except discord.Forbidden:
+            log(f"[DELETE] Cannot delete message - missing permissions for user {user.name}")
+        except discord.NotFound:
+            log("[DELETE] Message already deleted")
+        except Exception as e:
+            log(f"[DELETE] Error deleting message: {e}")
     except Exception as e:
-        log(f"[DELETE] Error checking original message: {e}")
-        return
-    
-    try:
-        await reaction.message.delete()
-        log(f"[DELETE] Deleted bot message due to X reaction from original user {user.name}")
-    except discord.Forbidden:
-        log(f"[DELETE] Cannot delete message - missing permissions for user {user.name}")
-    except discord.NotFound:
-        log("[DELETE] Message already deleted")
-    except Exception as e:
-        log(f"[DELETE] Error deleting message: {e}")
+        log(f"[REACTION ERROR] Unhandled exception in on_reaction_add: {e}")
+        import traceback
+        log(f"[REACTION ERROR] Traceback: {traceback.format_exc()}")
 
 
 @bot.event
 async def on_message(message):
     """Called whenever a message is sent in a channel the bot can see."""
-    # Prevent responding to own messages
-    if message.author == bot.user:
-        return
-
-    # Skip messages without content, attachments, or embeds (unless they're replies)
-    has_content = message.content or message.attachments or message.embeds
-    if not has_content and not message.reference:
-        return
-
-    is_mention = bot.user.mentioned_in(message)
-    is_reply_to_bot = False
-    conversation_history = []
-    referenced_content = ""
-    referenced_msg = None  # Initialize to None
-    
-    # Check if this is a reply to one of our messages
-    if message.reference and message.reference.message_id:
-        try:
-            referenced_msg = await message.channel.fetch_message(message.reference.message_id)
-            if referenced_msg.author == bot.user:
-                is_reply_to_bot = True
-                log(f"[REPLY] User {message.author.name} replied to bot message: '{referenced_msg.content[:50]}...'")
-                conversation_history = await build_conversation_history(message)
-            else:
-                # Extract content from referenced message for context (works with or without mention)
-                # Check if the referenced message is from a bot
-                is_referenced_bot = referenced_msg.author.bot
-                
-                if is_referenced_bot:
-                    # Extract comprehensive content from bot message
-                    referenced_content = await extract_bot_message_content(referenced_msg)
-                    log(f"[BOT_REPLY] User {message.author.name} replied to bot {referenced_msg.author.name}'s message")
-                else:
-                    # Regular user message - clean bot mentions from it
-                    original_content = referenced_msg.content
-                    log(f"[DEBUG] Referenced message ID: {referenced_msg.id}")
-                    log(f"[DEBUG] Referenced message type: {referenced_msg.type}")
-                    log(f"[DEBUG] Referenced message author: {referenced_msg.author.name}")
-                    log(f"[DEBUG] Referenced message has embeds: {bool(referenced_msg.embeds)}")
-                    log(f"[DEBUG] Referenced message has attachments: {bool(referenced_msg.attachments)}")
-                    log(f"[DEBUG] Original content: '{original_content}', length: {len(original_content)}")
-                    
-                    # If content is empty, this might be a message with only embeds/attachments or deleted content
-                    # Try to get something meaningful from the message
-                    if not original_content:
-                        if referenced_msg.embeds:
-                            # Try to extract text from embeds
-                            embed_texts = []
-                            for embed in referenced_msg.embeds:
-                                if embed.description:
-                                    embed_texts.append(embed.description)
-                                if embed.title:
-                                    embed_texts.append(embed.title)
-                            if embed_texts:
-                                original_content = " | ".join(embed_texts)
-                                log(f"[DEBUG] Extracted content from embeds: '{original_content[:50]}...'")
-                        elif referenced_msg.attachments:
-                            # Message has attachments but no text
-                            attachment_names = [att.filename for att in referenced_msg.attachments]
-                            original_content = f"[Attachments: {', '.join(attachment_names)}]"
-                            log(f"[DEBUG] Message has only attachments: {attachment_names}")
-                        else:
-                            # Truly empty message - might be deleted or edited
-                            log(f"[WARNING] Referenced message has no content, embeds, or attachments!")
-                            original_content = "[Empty or deleted message]"
-                    
-                    # Remove bot mentions to avoid confusion in AI context
-                    cleaned_content = re.sub(r'<@!?{}>'.format(bot.user.id), '', original_content).strip()
-                    log(f"[DEBUG] Cleaned content: '{cleaned_content}', length: {len(cleaned_content)}")
-                    # Use cleaned content, but fall back to original if it becomes empty
-                    referenced_content = cleaned_content if cleaned_content else original_content
-                    log(f"[DEBUG] Final referenced_content: '{referenced_content}', length: {len(referenced_content)}, bool: {bool(referenced_content)}")
-                    # Log the content
-                    if cleaned_content:
-                        log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message: '{referenced_content[:50]}...'")
-                    else:
-                        log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message (was only bot mention): '{referenced_content[:50]}...'")
-        except discord.NotFound:
-            log("[REPLY] Referenced message not found - might have been deleted")
-        except discord.Forbidden:
-            log("[REPLY] Cannot access referenced message - permission issue")
-        except Exception as e:
-            log(f"[REPLY] Error fetching referenced message: {e}")
-
-    # Only respond to mentions, replies to bot messages with new images, replies to other bots with explanation requests, or replies to any user (including self) with explanation requests
-    has_new_images = bool(message.attachments or message.embeds)
-    is_reply_to_other_bot = bool(referenced_msg and referenced_msg.author.bot and referenced_msg.author != bot.user)
-    is_explanation_request = detect_explanation_request(message.content)
-    # Allow explanation requests for any user message (including self-replies)
-    is_reply_to_user_with_explanation = bool(referenced_msg and not referenced_msg.author.bot and is_explanation_request and is_mention)
-
-    should_respond = is_mention or (is_reply_to_bot and has_new_images) or (is_reply_to_other_bot and is_explanation_request) or is_reply_to_user_with_explanation
-    
-    if not should_respond:
-        log(f"[SKIP] Ignoring message without mention, new images, or explanation request from {message.author.name}")
-        return
-
-    log(f"[INTERACTION] User {message.author.name} - Mention: {is_mention}, Reply: {is_reply_to_bot}")
-
-    content = message.content
-
-    # Clean up the content
-    if is_mention:
-        content = re.sub(r'<@!?{}>'.format(bot.user.id), '', content).strip()
-        log(f"[CONTENT] Extracted content after mention removal: '{content}'")
-
-    # Handle empty or very short content (but allow if there are images)
-    has_images = bool(message.attachments or message.embeds)
-    if not content:
-        if has_images:
-            content = "Please describe this image(s)."
-            log(f"[IMAGES] Using image description prompt for message with attachments")
-        elif is_reply_to_bot:
-            content = "Please continue our conversation."
-        else:
-            content = "Hello! Can you introduce yourself?"
-        log(f"[DEFAULT] Using default prompt: '{content}'")
-    elif len(content.strip()) < 3 and not has_images:
-        if is_reply_to_bot:
-            content = f"Continuing our conversation: '{content.strip()}'"
-        else:
-            content = f"Hello! Someone said '{content.strip()}'. Can you respond to that?"
-        log(f"[SHORT] Expanded short prompt to: '{content}'")
-
-    # Get AI response
-    log(f"[API] Calling Pollinations.AI API with prompt: '{content}'")
-    if conversation_history:
-        log(f"[CONTEXT] Including {len(conversation_history)} messages from conversation history")
-
-    # Include user's display name (nickname) in the prompt for personalization
-    user_display_name = message.author.display_name
-    
-    # Parse Discord mentions and create context
-    mention_map = parse_discord_mentions(message)
-    mention_context = ""
-    if mention_map:
-        mention_list = [f"{name}({user_id})" for name, user_id in mention_map.items()]
-        mention_context = f" [Mentioned users: {', '.join(mention_list)}]"
-        log(f"[MENTION] Found mentions: {mention_context}")
-    
-    # Include referenced message content if replying to another user's message with bot mention
-    reference_context = ""
-    log(f"[DEBUG] referenced_content exists: {bool(referenced_content)}, referenced_msg exists: {bool(referenced_msg)}")
-    if referenced_content and referenced_msg:
-        # Use enhanced context building for better bot message handling
-        reference_context = await build_enhanced_reference_context(message, referenced_msg, referenced_content)
-        log(f"[CONTEXT] Including referenced message: '{referenced_content[:50]}...'")
-    elif referenced_content:
-        # Fallback if referenced_msg is not available
-        reference_context = f" [Replying to: {referenced_content}]"
-        log(f"[CONTEXT] Using fallback context: '{referenced_content[:50]}...'")
-    else:
-        log(f"[DEBUG] No referenced content to include in context")
-    
-    personalized_content = f"[{user_display_name}]: {content}{mention_context}{reference_context}"
-
-    # Process any images in the message
-    image_descriptions = []
-    if message.attachments or message.embeds:
-        log("[IMAGES] Message contains attachments/embeds, processing images...")
-        image_descriptions = await get_image_descriptions(message)
-        if image_descriptions:
-            log(f"[IMAGES] Processed {len(image_descriptions)} images")
-
-    # Send thinking message first
-    thinking_message = await message.reply("🤔 Thinking...")
-    log(f"[THINKING] Sent thinking message as reply to user {message.author.name}")
-
-    ai_response = await get_ai_response(personalized_content, conversation_history, image_descriptions)
-
-    if not ai_response:
-        log("[ERROR] Got empty response from AI")
-        ai_response = "I apologize, but I couldn't generate a response right now. Please try again!"
-
-    log(f"[RESPONSE] AI response: '{ai_response[:100]}...'")
-
-    # Edit the thinking message with the actual response
     try:
-        await thinking_message.edit(content=ai_response)
-        log(f"[EDIT] Edited thinking message with AI response for {message.author.name}")
-    except discord.Forbidden:
-        log("[EDIT] Cannot edit message - missing permissions")
-        # Fallback to sending a new reply message
-        try:
-            await message.reply(ai_response)
-            log(f"[FALLBACK] Sent reply fallback for {message.author.name}")
-        except discord.Forbidden:
-            log("[FALLBACK] Cannot reply in this channel")
+        # Prevent responding to own messages
+        if message.author == bot.user:
+            return
+
+        # Skip messages without content, attachments, or embeds (unless they're replies)
+        has_content = message.content or message.attachments or message.embeds
+        if not has_content and not message.reference:
+            return
+
+        is_mention = bot.user.mentioned_in(message)
+        is_reply_to_bot = False
+        conversation_history = []
+        referenced_content = ""
+        referenced_msg = None  # Initialize to None
+        
+        # Check if this is a reply to one of our messages
+        if message.reference and message.reference.message_id:
             try:
-                await message.channel.send(f"{message.author.mention} {ai_response}")
-                log(f"[FALLBACK] Sent channel message fallback for {message.author.name}")
+                referenced_msg = await message.channel.fetch_message(message.reference.message_id)
+                if referenced_msg.author == bot.user:
+                    is_reply_to_bot = True
+                    log(f"[REPLY] User {message.author.name} replied to bot message: '{referenced_msg.content[:50]}...'")
+                    conversation_history = await build_conversation_history(message)
+                else:
+                    # Extract content from referenced message for context (works with or without mention)
+                    # Check if the referenced message is from a bot
+                    is_referenced_bot = referenced_msg.author.bot
+                    
+                    if is_referenced_bot:
+                        # Extract comprehensive content from bot message
+                        referenced_content = await extract_bot_message_content(referenced_msg)
+                        log(f"[BOT_REPLY] User {message.author.name} replied to bot {referenced_msg.author.name}'s message")
+                    else:
+                        # Regular user message - clean bot mentions from it
+                        original_content = referenced_msg.content
+                        log(f"[DEBUG] Referenced message ID: {referenced_msg.id}")
+                        log(f"[DEBUG] Referenced message type: {referenced_msg.type}")
+                        log(f"[DEBUG] Referenced message author: {referenced_msg.author.name}")
+                        log(f"[DEBUG] Referenced message has embeds: {bool(referenced_msg.embeds)}")
+                        log(f"[DEBUG] Referenced message has attachments: {bool(referenced_msg.attachments)}")
+                        log(f"[DEBUG] Original content: '{original_content}', length: {len(original_content)}")
+                        
+                        # If content is empty, this might be a message with only embeds/attachments or deleted content
+                        # Try to get something meaningful from the message
+                        if not original_content:
+                            if referenced_msg.embeds:
+                                # Try to extract text from embeds
+                                embed_texts = []
+                                for embed in referenced_msg.embeds:
+                                    if embed.description:
+                                        embed_texts.append(embed.description)
+                                    if embed.title:
+                                        embed_texts.append(embed.title)
+                                if embed_texts:
+                                    original_content = " | ".join(embed_texts)
+                                    log(f"[DEBUG] Extracted content from embeds: '{original_content[:50]}...'")
+                            elif referenced_msg.attachments:
+                                # Message has attachments but no text
+                                attachment_names = [att.filename for att in referenced_msg.attachments]
+                                original_content = f"[Attachments: {', '.join(attachment_names)}]"
+                                log(f"[DEBUG] Message has only attachments: {attachment_names}")
+                            else:
+                                # Truly empty message - might be deleted or edited
+                                log(f"[WARNING] Referenced message has no content, embeds, or attachments!")
+                                original_content = "[Empty or deleted message]"
+                        
+                        # Remove bot mentions to avoid confusion in AI context
+                        cleaned_content = re.sub(r'<@!?{}>'.format(bot.user.id), '', original_content).strip()
+                        log(f"[DEBUG] Cleaned content: '{cleaned_content}', length: {len(cleaned_content)}")
+                        # Use cleaned content, but fall back to original if it becomes empty
+                        referenced_content = cleaned_content if cleaned_content else original_content
+                        log(f"[DEBUG] Final referenced_content: '{referenced_content}', length: {len(referenced_content)}, bool: {bool(referenced_content)}")
+                        # Log the content
+                        if cleaned_content:
+                            log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message: '{referenced_content[:50]}...'")
+                        else:
+                            log(f"[USER_REPLY] User {message.author.name} replied to {referenced_msg.author.name}'s message (was only bot mention): '{referenced_content[:50]}...'")
+            except discord.NotFound:
+                log("[REPLY] Referenced message not found - might have been deleted")
+            except discord.Forbidden:
+                log("[REPLY] Cannot access referenced message - permission issue")
             except Exception as e:
-                log(f"[FALLBACK] Channel send failed: {e}")
-        except Exception as e:
-            log(f"[FALLBACK] Reply failed: {e}")
-            try:
-                await message.channel.send(f"{message.author.mention} {ai_response}")
-                log(f"[FALLBACK] Sent channel message fallback for {message.author.name}")
-            except Exception as e2:
-                log(f"[FALLBACK] Channel send failed: {e2}")
-    except Exception as e:
-        log(f"[EDIT] Edit failed: {e}")
-        # Fallback to sending a new reply message
+                log(f"[REPLY] Error fetching referenced message: {e}")
+
+        # Only respond to mentions, replies to bot messages with new images, replies to other bots with explanation requests, or replies to any user (including self) with explanation requests
+        has_new_images = bool(message.attachments or message.embeds)
+        is_reply_to_other_bot = bool(referenced_msg and referenced_msg.author.bot and referenced_msg.author != bot.user)
+        is_explanation_request = detect_explanation_request(message.content)
+        # Allow explanation requests for any user message (including self-replies)
+        is_reply_to_user_with_explanation = bool(referenced_msg and not referenced_msg.author.bot and is_explanation_request and is_mention)
+
+        should_respond = is_mention or (is_reply_to_bot and has_new_images) or (is_reply_to_other_bot and is_explanation_request) or is_reply_to_user_with_explanation
+        
+        if not should_respond:
+            log(f"[SKIP] Ignoring message without mention, new images, or explanation request from {message.author.name}")
+            return
+
+        log(f"[INTERACTION] User {message.author.name} - Mention: {is_mention}, Reply: {is_reply_to_bot}")
+
+        content = message.content
+
+        # Clean up the content
+        if is_mention:
+            content = re.sub(r'<@!?{}>'.format(bot.user.id), '', content).strip()
+            log(f"[CONTENT] Extracted content after mention removal: '{content}'")
+
+        # Handle empty or very short content (but allow if there are images)
+        has_images = bool(message.attachments or message.embeds)
+        if not content:
+            if has_images:
+                content = "Please describe this image(s)."
+                log(f"[IMAGES] Using image description prompt for message with attachments")
+            elif is_reply_to_bot:
+                content = "Please continue our conversation."
+            else:
+                content = "Hello! Can you introduce yourself?"
+            log(f"[DEFAULT] Using default prompt: '{content}'")
+        elif len(content.strip()) < 3 and not has_images:
+            if is_reply_to_bot:
+                content = f"Continuing our conversation: '{content.strip()}'"
+            else:
+                content = f"Hello! Someone said '{content.strip()}'. Can you respond to that?"
+            log(f"[SHORT] Expanded short prompt to: '{content}'")
+
+        # Get AI response
+        log(f"[API] Calling Pollinations.AI API with prompt: '{content}'")
+        if conversation_history:
+            log(f"[CONTEXT] Including {len(conversation_history)} messages from conversation history")
+
+        # Include user's display name (nickname) in the prompt for personalization
+        user_display_name = message.author.display_name
+        
+        # Parse Discord mentions and create context
+        mention_map = parse_discord_mentions(message)
+        mention_context = ""
+        if mention_map:
+            mention_list = [f"{name}({user_id})" for name, user_id in mention_map.items()]
+            mention_context = f" [Mentioned users: {', '.join(mention_list)}]"
+            log(f"[MENTION] Found mentions: {mention_context}")
+        
+        # Include referenced message content if replying to another user's message with bot mention
+        reference_context = ""
+        log(f"[DEBUG] referenced_content exists: {bool(referenced_content)}, referenced_msg exists: {bool(referenced_msg)}")
+        if referenced_content and referenced_msg:
+            # Use enhanced context building for better bot message handling
+            reference_context = await build_enhanced_reference_context(message, referenced_msg, referenced_content)
+            log(f"[CONTEXT] Including referenced message: '{referenced_content[:50]}...'")
+        elif referenced_content:
+            # Fallback if referenced_msg is not available
+            reference_context = f" [Replying to: {referenced_content}]"
+            log(f"[CONTEXT] Using fallback context: '{referenced_content[:50]}...'")
+        else:
+            log(f"[DEBUG] No referenced content to include in context")
+        
+        personalized_content = f"[{user_display_name}]: {content}{mention_context}{reference_context}"
+
+        # Process any images in the message
+        image_descriptions = []
+        if message.attachments or message.embeds:
+            log("[IMAGES] Message contains attachments/embeds, processing images...")
+            image_descriptions = await get_image_descriptions(message)
+            if image_descriptions:
+                log(f"[IMAGES] Processed {len(image_descriptions)} images")
+
+        # Send thinking message first
+        thinking_message = await message.reply("🤔 Thinking...")
+        log(f"[THINKING] Sent thinking message as reply to user {message.author.name}")
+
+        ai_response = await get_ai_response(personalized_content, conversation_history, image_descriptions)
+
+        if not ai_response:
+            log("[ERROR] Got empty response from AI")
+            ai_response = "I apologize, but I couldn't generate a response right now. Please try again!"
+
+        log(f"[RESPONSE] AI response: '{ai_response[:100]}...'")
+
+        # Edit the thinking message with the actual response
         try:
-            await message.reply(ai_response)
-            log(f"[FALLBACK] Sent reply fallback for {message.author.name}")
-        except Exception as e2:
-            log(f"[FALLBACK] Reply failed: {e2}")
+            await thinking_message.edit(content=ai_response)
+            log(f"[EDIT] Edited thinking message with AI response for {message.author.name}")
+        except discord.Forbidden:
+            log("[EDIT] Cannot edit message - missing permissions")
+            # Fallback to sending a new reply message
             try:
-                await message.channel.send(f"{message.author.mention} {ai_response}")
-                log(f"[FALLBACK] Sent channel message fallback for {message.author.name}")
-            except Exception as e3:
-                log(f"[FALLBACK] Channel send failed: {e3}")
+                await message.reply(ai_response)
+                log(f"[FALLBACK] Sent reply fallback for {message.author.name}")
+            except discord.Forbidden:
+                log("[FALLBACK] Cannot reply in this channel")
+                try:
+                    await message.channel.send(f"{message.author.mention} {ai_response}")
+                    log(f"[FALLBACK] Sent channel message fallback for {message.author.name}")
+                except Exception as e:
+                    log(f"[FALLBACK] Channel send failed: {e}")
+            except Exception as e:
+                log(f"[FALLBACK] Reply failed: {e}")
+                try:
+                    await message.channel.send(f"{message.author.mention} {ai_response}")
+                    log(f"[FALLBACK] Sent channel message fallback for {message.author.name}")
+                except Exception as e2:
+                    log(f"[FALLBACK] Channel send failed: {e2}")
+        except Exception as e:
+            log(f"[EDIT] Edit failed: {e}")
+            # Fallback to sending a new reply message
+            try:
+                await message.reply(ai_response)
+                log(f"[FALLBACK] Sent reply fallback for {message.author.name}")
+            except Exception as e2:
+                log(f"[FALLBACK] Reply failed: {e2}")
+                try:
+                    await message.channel.send(f"{message.author.mention} {ai_response}")
+                    log(f"[FALLBACK] Sent channel message fallback for {message.author.name}")
+                except Exception as e3:
+                    log(f"[FALLBACK] Channel send failed: {e3}")
+    except Exception as e:
+        log(f"[MESSAGE ERROR] Unhandled exception in on_message: {e}")
+        import traceback
+        log(f"[MESSAGE ERROR] Traceback: {traceback.format_exc()}")
+        # Try to notify user about the error
+        try:
+            await message.reply("Sorry, I encountered an error processing your message. Please try again!")
+        except:
+            pass
 
 
 @tree.command(name="image", description="Generate an AI image from a text prompt")
@@ -870,6 +890,27 @@ async def image_command(interaction: discord.Interaction, prompt: str):
         await interaction.followup.send("💥 Oops! Something went wrong while generating your image. Please try again!")
 
 
+@bot.event
+async def on_error(event: str, *args, **kwargs) -> None:
+    """Global error handler for Discord events."""
+    import traceback
+    log(f"[DISCORD ERROR] Error in event '{event}'")
+    log(f"[DISCORD ERROR] Traceback: {traceback.format_exc()}")
+    # Don't crash - let the bot continue running
+
+
+@bot.event
+async def on_disconnect() -> None:
+    """Called when the bot disconnects from Discord."""
+    log("[CONNECTION] Bot disconnected from Discord")
+
+
+@bot.event
+async def on_resumed() -> None:
+    """Called when the bot resumes a session after disconnection."""
+    log("[CONNECTION] Bot resumed connection to Discord")
+
+
 def run(token: Optional[str] = None) -> None:
     """Run the Discord bot. If token is None, read from DISCORD_BOT_TOKEN env var (after loading .env)."""
     load_dotenv()
@@ -877,20 +918,38 @@ def run(token: Optional[str] = None) -> None:
         token = os.getenv('DISCORD_BOT_TOKEN')
 
     if not token:
-        log("Error: DISCORD_BOT_TOKEN not found in environment variables")
-        log("Please create a .env file with your bot token or pass the token to run()")
+        log("[FATAL] DISCORD_BOT_TOKEN not found in environment variables")
+        log("[FATAL] Please create a .env file with your bot token or pass the token to run()")
+        log("[FATAL] Exiting to prevent restart loop...")
         sys.exit(1)
 
     if not token.strip():
-        log("Error: DISCORD_BOT_TOKEN is empty")
+        log("[FATAL] DISCORD_BOT_TOKEN is empty")
+        log("[FATAL] Exiting to prevent restart loop...")
         sys.exit(1)
 
-    log("Starting bot...")
+    log("[STARTUP] Starting bot...")
+    log(f"[STARTUP] Bot name: {BOT_NAME}")
+    log(f"[STARTUP] Bot status: {BOT_STATUS}")
+    
     try:
         bot.run(token)
     except discord.LoginFailure:
-        log("Error: Invalid bot token")
+        log("[FATAL] Invalid bot token - Discord rejected authentication")
+        log("[FATAL] Please check your DISCORD_BOT_TOKEN in .env file")
+        log("[FATAL] Exiting to prevent restart loop...")
         sys.exit(1)
+    except discord.PrivilegedIntentsRequired:
+        log("[FATAL] Missing privileged intents - message_content intent is required")
+        log("[FATAL] Enable it in Discord Developer Portal -> Bot -> Privileged Gateway Intents")
+        log("[FATAL] Exiting to prevent restart loop...")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        log("[SHUTDOWN] Received keyboard interrupt - shutting down gracefully")
+        sys.exit(0)
     except Exception as e:
-        log(f"Error starting bot: {e}")
+        log(f"[FATAL] Unexpected error starting bot: {e}")
+        import traceback
+        log(f"[FATAL] Traceback: {traceback.format_exc()}")
+        log("[FATAL] Exiting to prevent restart loop...")
         sys.exit(1)
