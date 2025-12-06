@@ -602,6 +602,11 @@ async def on_message(message):
         if message.author == bot.user:
             return
 
+        # Skip messages containing @everyone or @here to avoid spam
+        if "@everyone" in message.content or "@here" in message.content:
+            log(f"[SKIP] Ignoring message with @everyone/@here from {message.author.name}")
+            return
+
         # Skip messages without content, attachments, or embeds (unless they're replies)
         has_content = message.content or message.attachments or message.embeds
         if not has_content and not message.reference:
