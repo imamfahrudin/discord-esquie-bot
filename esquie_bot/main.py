@@ -344,7 +344,7 @@ async def get_ai_response(user_message: str, conversation_history: Optional[List
         url = "https://text.pollinations.ai/openai"
 
         messages = [
-            {"role": "system", "content": f"You are {BOT_NAME}, a helpful AI assistant that responds naturally to user messages in multiple languages including English, Spanish, French, German, Italian, Portuguese, Indonesian, and others. Match the user's language when possible. Current date and time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}. Try to respond in a single paragraph and avoid complex formatting. When users mention other Discord users in their messages, use Discord mention format <@user_id> in your responses instead of plain usernames. You can also see and describe images that users share."}
+            {"role": "system", "content": f"You are {BOT_NAME}, a helpful AI assistant that responds naturally to user messages in multiple languages including English, Spanish, French, German, Italian, Portuguese, Indonesian, and others. Match the user's language when possible. Current date and time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}. Try to respond in a single paragraph and avoid complex formatting. When responding to users who mention other Discord users, use the Discord mention format <@user_id> in your responses instead of plain usernames. If you need to explain mentioning to users, use the @name format instead of revealing the internal <@user_id> format. You can also see and describe images that users share."}
         ]
 
         # Limit conversation history to prevent API token limits (keep last 10 messages)
