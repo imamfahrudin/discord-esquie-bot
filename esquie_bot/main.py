@@ -797,6 +797,11 @@ async def _process_user_message_impl(message, thinking_message=None):
 
     log(f"[RESPONSE] AI response: '{ai_response[:100]}...'")
 
+    # Truncate response if it exceeds Discord's 2000 character limit
+    if len(ai_response) > 2000:
+        ai_response = ai_response[:1997] + "..."
+        log("[TRUNCATE] AI response truncated to fit Discord's 2000 character limit")
+
     # Edit the thinking message with the actual response
     try:
         await thinking_message.edit(content=ai_response)
