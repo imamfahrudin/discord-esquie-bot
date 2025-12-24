@@ -799,31 +799,63 @@ async def _process_user_message_impl(message, thinking_message=None):
 
     # Check if response exceeds Discord's 2000 character limit
     if len(ai_response) > 2000:
-        # Edit thinking message to indicate separate response
+        # Split long response into chunks
+        chunks = []
+        remaining = ai_response
+        while len(remaining) > 2000:
+            # Find a good break point (sentence end or word boundary)
+            chunk = remaining[:2000]
+            # Try to break at sentence end
+            last_sentence = max(chunk.rfind('.'), chunk.rfind('!'), chunk.rfind('?'))
+            if last_sentence > 1800:  # If sentence break is reasonable
+                chunk = chunk[:last_sentence + 1]
+            else:
+                # Try to break at word boundary
+                last_space = chunk.rfind(' ')
+                if last_space > 1800:
+                    chunk = chunk[:last_space]
+            
+            chunks.append(chunk)
+            remaining = remaining[len(chunk):].lstrip()
+        
+        if remaining:  # Add any remaining content
+            chunks.append(remaining)
+        
+        log(f"[LONG_RESPONSE] Split response into {len(chunks)} chunks")
+        
+        # Edit thinking message to indicate split response
         try:
-            await thinking_message.edit(content="My response is quite long, sending it as a separate message below...")
-            log(f"[LONG_RESPONSE] Edited thinking message to indicate separate response for {message.author.name}")
+            await thinking_message.edit(content=f"My response is quite long, sending it in {len(chunks)} parts below...")
+            log(f"[LONG_RESPONSE] Edited thinking message to indicate {len(chunks)} parts for {message.author.name}")
         except Exception as e:
             log(f"[LONG_RESPONSE] Failed to edit thinking message: {e}")
         
-        # Send full response as a new reply to maintain the reply chain
-        try:
-            await message.reply(ai_response)
-            log(f"[LONG_RESPONSE] Sent full AI response as separate reply for {message.author.name}")
-        except discord.Forbidden:
-            log("[LONG_RESPONSE] Cannot reply - missing permissions")
+        # Send chunks as a reply chain
+        last_message = message  # Start with the original user message
+        for i, chunk in enumerate(chunks, 1):
             try:
-                await message.channel.send(f"{message.author.mention} {ai_response}")
-                log(f"[LONG_RESPONSE] Sent full AI response as channel message fallback for {message.author.name}")
+                # Send each chunk as a reply to the previous message in the chain
+                sent_message = await last_message.reply(chunk)
+                last_message = sent_message  # Update for next iteration
+                log(f"[LONG_RESPONSE] Sent chunk {i}/{len(chunks)} ({len(chunk)} chars) for {message.author.name}")
+            except discord.Forbidden:
+                log(f"[LONG_RESPONSE] Cannot reply for chunk {i} - missing permissions")
+                try:
+                    sent_message = await message.channel.send(f"{message.author.mention} {chunk}")
+                    last_message = sent_message
+                    log(f"[LONG_RESPONSE] Sent chunk {i} as channel message fallback for {message.author.name}")
+                except Exception as e:
+                    log(f"[LONG_RESPONSE] Channel send failed for chunk {i}: {e}")
+                    break  # Stop sending more chunks if this fails
             except Exception as e:
-                log(f"[LONG_RESPONSE] Channel send failed: {e}")
-        except Exception as e:
-            log(f"[LONG_RESPONSE] Reply failed: {e}")
-            try:
-                await message.channel.send(f"{message.author.mention} {ai_response}")
-                log(f"[LONG_RESPONSE] Sent full AI response as channel message fallback for {message.author.name}")
-            except Exception as e2:
-                log(f"[LONG_RESPONSE] Channel send failed: {e2}")
+                log(f"[LONG_RESPONSE] Reply failed for chunk {i}: {e}")
+                try:
+                    sent_message = await message.channel.send(f"{message.author.mention} {chunk}")
+                    last_message = sent_message
+                    log(f"[LONG_RESPONSE] Sent chunk {i} as channel message fallback for {message.author.name}")
+                except Exception as e2:
+                    log(f"[LONG_RESPONSE] Channel send failed for chunk {i}: {e2}")
+                    break  # Stop sending more chunks if this fails
     else:
         # Edit the thinking message with the actual response
         try:
