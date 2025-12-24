@@ -797,48 +797,71 @@ async def _process_user_message_impl(message, thinking_message=None):
 
     log(f"[RESPONSE] AI response: '{ai_response[:100]}...'")
 
-    # Truncate response if it exceeds Discord's 2000 character limit
+    # Check if response exceeds Discord's 2000 character limit
     if len(ai_response) > 2000:
-        ai_response = ai_response[:1997] + "..."
-        log("[TRUNCATE] AI response truncated to fit Discord's 2000 character limit")
-
-    # Edit the thinking message with the actual response
-    try:
-        await thinking_message.edit(content=ai_response)
-        log(f"[EDIT] Edited thinking message with AI response for {message.author.name}")
-    except discord.Forbidden:
-        log("[EDIT] Cannot edit message - missing permissions")
-        # Fallback to sending a new reply message
+        # Edit thinking message to indicate separate response
         try:
-            await message.reply(ai_response)
-            log(f"[FALLBACK] Sent reply fallback for {message.author.name}")
-        except discord.Forbidden:
-            log("[FALLBACK] Cannot reply in this channel")
-            try:
-                await message.channel.send(f"{message.author.mention} {ai_response}")
-                log(f"[FALLBACK] Sent channel message fallback for {message.author.name}")
-            except Exception as e:
-                log(f"[FALLBACK] Channel send failed: {e}")
+            await thinking_message.edit(content="My response is quite long, sending it as a separate message below...")
+            log(f"[LONG_RESPONSE] Edited thinking message to indicate separate response for {message.author.name}")
         except Exception as e:
-            log(f"[FALLBACK] Reply failed: {e}")
-            try:
-                await message.channel.send(f"{message.author.mention} {ai_response}")
-                log(f"[FALLBACK] Sent channel message fallback for {message.author.name}")
-            except Exception as e2:
-                log(f"[FALLBACK] Channel send failed: {e2}")
-    except Exception as e:
-        log(f"[EDIT] Edit failed: {e}")
-        # Fallback to sending a new reply message
+            log(f"[LONG_RESPONSE] Failed to edit thinking message: {e}")
+        
+        # Send full response as a new reply to maintain the reply chain
         try:
             await message.reply(ai_response)
-            log(f"[FALLBACK] Sent reply fallback for {message.author.name}")
-        except Exception as e2:
-            log(f"[FALLBACK] Reply failed: {e2}")
+            log(f"[LONG_RESPONSE] Sent full AI response as separate reply for {message.author.name}")
+        except discord.Forbidden:
+            log("[LONG_RESPONSE] Cannot reply - missing permissions")
             try:
                 await message.channel.send(f"{message.author.mention} {ai_response}")
-                log(f"[FALLBACK] Sent channel message fallback for {message.author.name}")
+                log(f"[LONG_RESPONSE] Sent full AI response as channel message fallback for {message.author.name}")
+            except Exception as e:
+                log(f"[LONG_RESPONSE] Channel send failed: {e}")
+        except Exception as e:
+            log(f"[LONG_RESPONSE] Reply failed: {e}")
+            try:
+                await message.channel.send(f"{message.author.mention} {ai_response}")
+                log(f"[LONG_RESPONSE] Sent full AI response as channel message fallback for {message.author.name}")
             except Exception as e2:
-                log(f"[FALLBACK] Channel send failed: {e2}")
+                log(f"[LONG_RESPONSE] Channel send failed: {e2}")
+    else:
+        # Edit the thinking message with the actual response
+        try:
+            await thinking_message.edit(content=ai_response)
+            log(f"[EDIT] Edited thinking message with AI response for {message.author.name}")
+        except discord.Forbidden:
+            log("[EDIT] Cannot edit message - missing permissions")
+            # Fallback to sending a new reply message
+            try:
+                await message.reply(ai_response)
+                log(f"[FALLBACK] Sent reply fallback for {message.author.name}")
+            except discord.Forbidden:
+                log("[FALLBACK] Cannot reply in this channel")
+                try:
+                    await message.channel.send(f"{message.author.mention} {ai_response}")
+                    log(f"[FALLBACK] Sent channel message fallback for {message.author.name}")
+                except Exception as e:
+                    log(f"[FALLBACK] Channel send failed: {e}")
+            except Exception as e:
+                log(f"[FALLBACK] Reply failed: {e}")
+                try:
+                    await message.channel.send(f"{message.author.mention} {ai_response}")
+                    log(f"[FALLBACK] Sent channel message fallback for {message.author.name}")
+                except Exception as e2:
+                    log(f"[FALLBACK] Channel send failed: {e2}")
+        except Exception as e:
+            log(f"[EDIT] Edit failed: {e}")
+            # Fallback to sending a new reply message
+            try:
+                await message.reply(ai_response)
+                log(f"[FALLBACK] Sent reply fallback for {message.author.name}")
+            except Exception as e2:
+                log(f"[FALLBACK] Reply failed: {e2}")
+                try:
+                    await message.channel.send(f"{message.author.mention} {ai_response}")
+                    log(f"[FALLBACK] Sent channel message fallback for {message.author.name}")
+                except Exception as e2:
+                    log(f"[FALLBACK] Channel send failed: {e2}")
 @bot.event
 async def on_message(message):
     """Called whenever a message is sent in a channel the bot can see."""
