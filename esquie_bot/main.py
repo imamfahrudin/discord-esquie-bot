@@ -1143,24 +1143,41 @@ def run(token: Optional[str] = None) -> None:
     log(f"[STARTUP] Bot name: {BOT_NAME}")
     log(f"[STARTUP] Bot status: {BOT_STATUS}")
     
-    try:
-        bot.run(token)
-    except discord.LoginFailure:
-        log("[FATAL] Invalid bot token - Discord rejected authentication")
-        log("[FATAL] Please check your DISCORD_BOT_TOKEN in .env file")
-        log("[FATAL] Exiting to prevent restart loop...")
-        sys.exit(1)
-    except discord.PrivilegedIntentsRequired:
-        log("[FATAL] Missing privileged intents - message_content intent is required")
-        log("[FATAL] Enable it in Discord Developer Portal -> Bot -> Privileged Gateway Intents")
-        log("[FATAL] Exiting to prevent restart loop...")
-        sys.exit(1)
-    except KeyboardInterrupt:
-        log("[SHUTDOWN] Received keyboard interrupt - shutting down gracefully")
-        sys.exit(0)
-    except Exception as e:
-        log(f"[FATAL] Unexpected error starting bot: {e}")
-        import traceback
-        log(f"[FATAL] Traceback: {traceback.format_exc()}")
-        log("[FATAL] Exiting to prevent restart loop...")
+    max_retries = 5
+    retry_delay = 60  # Start with 60 seconds
+    for attempt in range(max_retries):
+        try:
+            log(f"[STARTUP] Attempting to start bot (attempt {attempt + 1}/{max_retries})...")
+            bot.run(token)
+            break  # Success, exit loop
+        except discord.HTTPException as e:
+            if e.status == 429:
+                log(f"[RATE_LIMIT] Rate limited (attempt {attempt + 1}/{max_retries}). Retrying in {retry_delay} seconds...")
+                import time
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                log(f"[HTTP_ERROR] HTTP Error: {e}")
+                raise
+        except discord.LoginFailure:
+            log("[FATAL] Invalid bot token - Discord rejected authentication")
+            log("[FATAL] Please check your DISCORD_BOT_TOKEN in .env file")
+            log("[FATAL] Exiting to prevent restart loop...")
+            sys.exit(1)
+        except discord.PrivilegedIntentsRequired:
+            log("[FATAL] Missing privileged intents - message_content intent is required")
+            log("[FATAL] Enable it in Discord Developer Portal -> Bot -> Privileged Gateway Intents")
+            log("[FATAL] Exiting to prevent restart loop...")
+            sys.exit(1)
+        except KeyboardInterrupt:
+            log("[SHUTDOWN] Received keyboard interrupt - shutting down gracefully")
+            sys.exit(0)
+        except Exception as e:
+            log(f"[FATAL] Unexpected error starting bot: {e}")
+            import traceback
+            log(f"[FATAL] Traceback: {traceback.format_exc()}")
+            log("[FATAL] Exiting to prevent restart loop...")
+            sys.exit(1)
+    else:
+        log(f"[FATAL] Failed to start bot after {max_retries} attempts due to rate limiting.")
         sys.exit(1)
